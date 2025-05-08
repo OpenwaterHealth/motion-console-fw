@@ -227,11 +227,11 @@ int main(void)
 
   LED_Init();
 
-  printf("I2C1\r\n");
-  I2C_scan(&hi2c1, NULL, 0, true);
+  // printf("I2C1\r\n");
+  // I2C_scan(&hi2c1, NULL, 0, true);
 
-  printf("I2C2\r\n");
-  I2C_scan(&hi2c2, NULL, 0, true);
+  // printf("I2C2\r\n");
+  // I2C_scan(&hi2c2, NULL, 0, true);
 
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
@@ -240,16 +240,8 @@ int main(void)
 	      printf("Failed to initialize MUX1 on I2C1\r\n");
 	      iic_mux[i].initialized = false;
 	  } else {
-		  printf("Scan each channel of MUX%d\r\n", i+1);
+		  printf("Initialized MUX%d\r\n", i+1);
 	      iic_mux[i].initialized = true;
-		  for(int x=0; x<8; x++){
-			if (TCA9548A_SelectChannel(&iic_mux[i], x) != TCA9548A_OK) {
-				printf("error selecting channel %d\r\n", x);
-			} else {
-				printf("Scan MUX%d channel %d\r\n",i+1, x);
-				I2C_scan(iic_mux[i].hi2c, NULL, 0, true);
-			}
-		  }
 	  }
 
   }
