@@ -29,7 +29,9 @@
 #include "trigger.h"
 #include "fan_driver.h"
 #include "led_driver.h"
+#include "tca9548a.h"
 #include "utils.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -80,10 +82,13 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 1};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 2};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
+
+// Declare handles for your two multiplexers
+TCA9548A_HandleTypeDef iic_mux[2];
 
 
 /* USER CODE END PV */
@@ -108,6 +113,41 @@ static void MX_TIM15_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
+
+static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t list_size, bool display) {
+
+	uint8_t found = 0;
+
+    // Iterate through all possible 7-bit addresses
+    for (uint8_t address = 0x00; address <= 0x7F; address++) {
+        HAL_StatusTypeDef status;
+        status = HAL_I2C_IsDeviceReady(pI2c, address << 1, 2, 50); // Address shift left by 1 for read/write bit
+        if (status == HAL_OK) {
+        	if(addr_list != NULL && found < list_size) {
+        		addr_list[found] = address;
+        	}
+        	found++;
+        	if(display)
+        	{
+        		printf("%2x ", address);
+        	}
+        }else{
+        	if(display)
+        	{
+        		printf("-- ");
+        	}
+        }
+        if (display && (address + 1) % 16 == 0)  printf("\r\n");
+    }
+
+	if(display)
+	{
+		printf("\r\n");
+	    fflush(stdout);
+	}
+
+    return found;
+}
 
 /* USER CODE END PFP */
 
@@ -186,6 +226,34 @@ int main(void)
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
 
   LED_Init();
+
+  printf("I2C1\r\n");
+  I2C_scan(&hi2c1, NULL, 0, true);
+
+  printf("I2C2\r\n");
+  I2C_scan(&hi2c2, NULL, 0, true);
+
+  // Initialize first multiplexer on I2C1 with default address
+  for(int i = 0; i < 2; i++)
+  {
+	  if (TCA9548A_Init(&iic_mux[i], i==0?&hi2c1:&hi2c2, TCA9548A_DEFAULT_ADDRESS) != TCA9548A_OK) {
+	      printf("Failed to initialize MUX1 on I2C1\r\n");
+	      iic_mux[i].initialized = false;
+	  } else {
+		  printf("Scan each channel of MUX%d\r\n", i+1);
+	      iic_mux[i].initialized = true;
+		  for(int x=0; x<8; x++){
+			if (TCA9548A_SelectChannel(&iic_mux[i], x) != TCA9548A_OK) {
+				printf("error selecting channel %d\r\n", x);
+			} else {
+				printf("Scan MUX%d channel %d\r\n",i+1, x);
+				I2C_scan(iic_mux[i].hi2c, NULL, 0, true);
+			}
+		  }
+	  }
+
+  }
+
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
@@ -194,6 +262,7 @@ int main(void)
   // configure PWM for trigger pulse
   const Trigger_Config_t myTriggerConfig = { 40, 1000, 100, 100 };
   Trigger_SetConfig(&myTriggerConfig);
+
 
   /* USER CODE END 2 */
 
@@ -691,9 +760,9 @@ static void MX_TIM5_Init(void)
   htim5.Instance = TIM5;
   htim5.Init.Prescaler = 120-1;
   htim5.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim5.Init.Period = 150-1;
+  htim5.Init.Period = 25000-1;
   htim5.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim5.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim5) != HAL_OK)
   {
     Error_Handler();
@@ -714,10 +783,10 @@ static void MX_TIM5_Init(void)
     Error_Handler();
   }
   sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 50;
+  sConfigOC.Pulse = 1000;
   sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
   sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  if (HAL_TIM_PWM_ConfigChannel(&htim5, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  if (HAL_TIM_PWM_ConfigChannel(&htim5, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -909,23 +978,22 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, HUB_RESET_Pin|SDA_REM_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|GPIO1_Pin|GPIO0_Pin|GPIO4_Pin
-                          |GPIO3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, SYS_EN_Pin|LED_ON_Pin|GPIO5_Pin|GPIO2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, IND3_Pin|IND2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO1_Pin|GPIO0_Pin|GPIO4_Pin|GPIO3_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOD, IND3_Pin|IND2_Pin|enSyncIN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, SCL_CFG_Pin|IND1_Pin|enSyncOUT_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOA, SCL_CFG_Pin|IND1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, IO_EXP_RSTN_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : HUB_RESET_Pin SDA_REM_Pin */
   GPIO_InitStruct.Pin = HUB_RESET_Pin|SDA_REM_Pin;
@@ -950,8 +1018,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : IND3_Pin IND2_Pin */
-  GPIO_InitStruct.Pin = IND3_Pin|IND2_Pin;
+  /*Configure GPIO pins : IND3_Pin IND2_Pin enSyncIN_Pin */
+  GPIO_InitStruct.Pin = IND3_Pin|IND2_Pin|enSyncIN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -969,12 +1037,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : enSyncIN_Pin */
-  GPIO_InitStruct.Pin = enSyncIN_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(enSyncIN_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */

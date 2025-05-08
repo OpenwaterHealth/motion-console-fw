@@ -14,7 +14,7 @@ static uint8_t usart_start_tx_dma_transfer(void);
 
 /* Ring buffer for TX data */
 lwrb_t usart_tx_buff;
-uint8_t usart_tx_buff_data[1024];
+uint8_t usart_tx_buff_data[4096];
 volatile size_t usart_tx_dma_current_len;
 
 

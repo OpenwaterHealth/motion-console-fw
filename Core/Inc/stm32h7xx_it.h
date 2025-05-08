@@ -56,6 +56,7 @@ void DMA1_Stream0_IRQHandler(void);
 void DMA1_Stream1_IRQHandler(void);
 void TIM4_IRQHandler(void);
 void TIM8_BRK_TIM12_IRQHandler(void);
+void TIM5_IRQHandler(void);
 void UART4_IRQHandler(void);
 void OTG_FS_IRQHandler(void);
 void TIM17_IRQHandler(void);

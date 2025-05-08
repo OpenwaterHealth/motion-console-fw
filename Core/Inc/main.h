@@ -91,10 +91,10 @@ void Error_Handler(void);
 #define DBG_TX_GPIO_Port GPIOD
 #define SDA_REM_Pin GPIO_PIN_9
 #define SDA_REM_GPIO_Port GPIOC
-#define FSYNC_Pin GPIO_PIN_6
-#define FSYNC_GPIO_Port GPIOC
-#define LSYNC_Pin GPIO_PIN_1
-#define LSYNC_GPIO_Port GPIOA
+#define TA_TRIGGER_Pin GPIO_PIN_6
+#define TA_TRIGGER_GPIO_Port GPIOC
+#define FSYNC_Pin GPIO_PIN_0
+#define FSYNC_GPIO_Port GPIOA
 #define GPIO4_Pin GPIO_PIN_7
 #define GPIO4_GPIO_Port GPIOE
 #define IO_EXP_RSTN_Pin GPIO_PIN_2
