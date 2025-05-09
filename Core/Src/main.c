@@ -46,7 +46,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-// #define SCAN_DISPLAY
+//#define SCAN_DISPLAY
 
 /* USER CODE END PD */
 
@@ -269,6 +269,49 @@ int main(void)
   // configure PWM for trigger pulse
   const Trigger_Config_t myTriggerConfig = { 40, 1000, 100, 100 };
   Trigger_SetConfig(&myTriggerConfig);
+
+
+  if (TCA9548A_SelectChannel(&iic_mux[1], 5) != TCA9548A_OK) {
+	printf("error selecting channel\r\n");
+  } else {
+	uint8_t mem_address = 0x00;
+	uint8_t fpga_addr = 0x41;
+	printf("Write 0x%02X Address 0x%02X\r\n", fpga_addr, mem_address);
+    uint8_t data[] = {0x03, 0x21};
+    HAL_StatusTypeDef status = HAL_I2C_Mem_Write(iic_mux[1].hi2c,
+    											 fpga_addr << 1,
+                                                 mem_address,
+                                                 I2C_MEMADD_SIZE_8BIT,
+                                                 data,
+                                                 sizeof(data),
+                                                 HAL_MAX_DELAY);
+
+    if (status != HAL_OK) {
+        // handle error (HAL_I2C_ERROR_TIMEOUT, HAL_I2C_ERROR_AF, etc.)
+    	printf("write i2c handle error\r\n");
+    }
+
+    HAL_Delay(1000);
+    uint8_t read_data[2];
+    printf("Read Address 0x0\r\n");
+
+    status = HAL_I2C_Mem_Read(iic_mux[1].hi2c,
+    		fpga_addr << 1,
+			mem_address,
+			I2C_MEMADD_SIZE_8BIT,
+			read_data,
+			sizeof(read_data),
+			HAL_MAX_DELAY);
+
+    if (status == HAL_OK) {
+         // Data is now in read_data[0] to read_data[2]
+    	printBuffer(read_data, 2);
+	} else {
+		// Handle error
+		printf("read i2c handle error\r\n");
+	}
+
+  }
 
 
   /* USER CODE END 2 */
