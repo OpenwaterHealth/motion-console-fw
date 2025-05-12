@@ -55,6 +55,23 @@ USBD_HandleTypeDef hUsbDeviceFS;
  */
 /* USER CODE BEGIN 1 */
 
+
+void MX_USB_DEVICE_DeInit(void)
+{
+
+    /* Stop USB Device */
+    if (USBD_Stop(&hUsbDeviceFS) != USBD_OK)
+    {
+        Error_Handler();
+    }
+
+    /* De-initialize the USB Device Library */
+    if (USBD_DeInit(&hUsbDeviceFS) != USBD_OK)
+    {
+        Error_Handler();
+    }
+
+}
 /* USER CODE END 1 */
 
 /**

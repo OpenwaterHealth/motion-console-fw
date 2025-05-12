@@ -30,6 +30,7 @@
 #include "fan_driver.h"
 #include "led_driver.h"
 #include "tca9548a.h"
+#include "pca9535.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -46,7 +47,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-//#define SCAN_DISPLAY
+// #define SCAN_DISPLAY
 
 /* USER CODE END PD */
 
@@ -91,6 +92,7 @@ uint8_t txBuffer[COMMAND_MAX_SIZE];
 // Declare handles for your two multiplexers
 TCA9548A_HandleTypeDef iic_mux[2];
 
+volatile bool _enter_dfu = false;
 
 /* USER CODE END PV */
 
@@ -151,6 +153,16 @@ static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t lis
     return found;
 }
 #endif
+
+void delay_ms(uint32_t ms)
+{
+	printf("Clock: %ld\r\n", SystemCoreClock);
+    uint32_t delay_cycles = (SystemCoreClock / 1000) * ms;
+    while (delay_cycles--) {
+        __NOP();  // Ensures the loop doesn't get optimized away
+    }
+}
+
 
 /* USER CODE END PFP */
 
@@ -271,47 +283,6 @@ int main(void)
   Trigger_SetConfig(&myTriggerConfig);
 
 
-  if (TCA9548A_SelectChannel(&iic_mux[1], 5) != TCA9548A_OK) {
-	printf("error selecting channel\r\n");
-  } else {
-	uint8_t mem_address = 0x00;
-	uint8_t fpga_addr = 0x41;
-	printf("Write 0x%02X Address 0x%02X\r\n", fpga_addr, mem_address);
-    uint8_t data[] = {0x03, 0x21};
-    HAL_StatusTypeDef status = HAL_I2C_Mem_Write(iic_mux[1].hi2c,
-    											 fpga_addr << 1,
-                                                 mem_address,
-                                                 I2C_MEMADD_SIZE_8BIT,
-                                                 data,
-                                                 sizeof(data),
-                                                 HAL_MAX_DELAY);
-
-    if (status != HAL_OK) {
-        // handle error (HAL_I2C_ERROR_TIMEOUT, HAL_I2C_ERROR_AF, etc.)
-    	printf("write i2c handle error\r\n");
-    }
-
-    HAL_Delay(1000);
-    uint8_t read_data[2];
-    printf("Read Address 0x0\r\n");
-
-    status = HAL_I2C_Mem_Read(iic_mux[1].hi2c,
-    		fpga_addr << 1,
-			mem_address,
-			I2C_MEMADD_SIZE_8BIT,
-			read_data,
-			sizeof(read_data),
-			HAL_MAX_DELAY);
-
-    if (status == HAL_OK) {
-         // Data is now in read_data[0] to read_data[2]
-    	printBuffer(read_data, 2);
-	} else {
-		// Handle error
-		printf("read i2c handle error\r\n");
-	}
-
-  }
 
 
   /* USER CODE END 2 */
@@ -911,9 +882,9 @@ static void MX_TIM15_Init(void)
 
   /* USER CODE END TIM15_Init 1 */
   htim15.Instance = TIM15;
-  htim15.Init.Prescaler = 0;
+  htim15.Init.Prescaler = 12000-1;
   htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim15.Init.Period = 65535;
+  htim15.Init.Period = 5000-1;
   htim15.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim15.Init.RepetitionCounter = 0;
   htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -1193,6 +1164,19 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     HAL_IncTick();
   }
   /* USER CODE BEGIN Callback 1 */
+  if (htim->Instance == TIM15) {
+	HAL_TIM_Base_Stop_IT(htim);
+	if(_enter_dfu) {
+
+	}
+
+	MX_USB_DEVICE_DeInit();
+	delay_ms(200);
+	// Reset the board
+	NVIC_SystemReset();
+
+  }
+
 
   /* USER CODE END Callback 1 */
 }

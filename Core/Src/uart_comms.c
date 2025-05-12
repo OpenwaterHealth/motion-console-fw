@@ -30,6 +30,8 @@ SemaphoreHandle_t xRxSemaphore;
 TaskHandle_t commsTaskHandle;
 
 extern uint8_t FIRMWARE_VERSION_DATA[3];
+extern bool _enter_dfu;
+
 static uint32_t id_words[3] = {0};
 
 static char retTriggerJson[0xFF];
@@ -309,6 +311,36 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = strlen(retTriggerJson);
 			uartResp->data = (uint8_t *)retTriggerJson;
+			break;
+
+		case OW_CMD_RESET:
+			printf("Soft Reset\r\n");
+			uartResp->command = cmd->command;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 0;
+
+			__HAL_TIM_CLEAR_FLAG(&htim15, TIM_FLAG_UPDATE);
+			__HAL_TIM_SET_COUNTER(&htim15, 0);
+			if(HAL_TIM_Base_Start_IT(&htim15) != HAL_OK){
+				uartResp->packet_type = OW_ERROR;
+			}
+			break;
+
+		case OW_CMD_DFU:
+			printf("Enter DFU\r\n");
+			uartResp->command = cmd->command;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 0;
+
+			_enter_dfu = true;
+
+			__HAL_TIM_CLEAR_FLAG(&htim15, TIM_FLAG_UPDATE);
+			__HAL_TIM_SET_COUNTER(&htim15, 0);
+			if(HAL_TIM_Base_Start_IT(&htim15) != HAL_OK){
+				uartResp->packet_type = OW_ERROR;
+			}
 			break;
 		default:
 			break;
