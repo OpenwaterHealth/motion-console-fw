@@ -127,7 +127,7 @@ extern UART_HandleTypeDef huart4;
 
 #define DEBUG_UART huart4
 
-#define FAN_PWM_TIMER htim15  // Use TIM1 for PWM generation
+#define FAN_PWM_TIMER htim15  //
 #define LASER_TIMER htim5
 #define LASER_TIMER_CHAN TIM_CHANNEL_2
 #define FSYNC_TIMER htim3

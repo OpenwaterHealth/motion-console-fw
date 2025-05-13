@@ -20,6 +20,7 @@
 void FAN_Init(void);
 void FAN_DeInit(void);
 void FAN_SetSpeed(uint32_t channel, uint8_t duty_cycle);
+uint8_t FAN_GetSpeed(uint32_t channel);
 uint32_t FAN_GetRPM(uint32_t channel);
 
 #endif /* INC_FAN_DRIVER_H_ */

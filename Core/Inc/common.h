@@ -95,6 +95,8 @@ typedef enum {
 	OW_CTRL_GET_TRIG = 0x14,
 	OW_CTRL_START_TRIG = 0x15,
 	OW_CTRL_STOP_TRIG = 0x16,
+	OW_CTRL_SET_FAN = 0x17,
+	OW_CTRL_GET_FAN = 0x18,
 } MotionControllerCommands;
 
 typedef enum {

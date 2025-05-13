@@ -15,6 +15,7 @@
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
 #include "tca9548a.h"
+#include "fan_driver.h"
 #include "trigger.h"
 
 // Private variables
@@ -32,6 +33,7 @@ TaskHandle_t commsTaskHandle;
 extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
+static uint8_t last_fan_speed[2] = {0};
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
 
@@ -246,16 +248,16 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 	switch (cmd->command)
 	{
 		case OW_CTRL_I2C_SCAN:
-			printf("I2C Scan\r\n");
+			//printf("I2C Scan\r\n");
 			uartResp->command = OW_CTRL_I2C_SCAN;
 			if(cmd->data_len != 2){
 				uartResp->packet_type = OW_ERROR;
 				uartResp->data_len = 0;
 				uartResp->data = NULL;
 			}else{
-				printf("I2C Scan MUX: 0x%02X CH: 0x%02X \r\n", cmd->data[0], cmd->data[1]);
+				//printf("I2C Scan MUX: 0x%02X CH: 0x%02X \r\n", cmd->data[0], cmd->data[1]);
 				memset(i2c_list, 0, 10);
-				iRet = TCA9548A_scan_channel(cmd->data[0], cmd->data[1], i2c_list, 10, true);
+				iRet = TCA9548A_scan_channel(cmd->data[0], cmd->data[1], i2c_list, 10, false);
 				if(iRet < 0){
 					// error
 					uartResp->packet_type = OW_ERROR;
@@ -268,7 +270,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			}
 			break;
 		case OW_CTRL_SET_IND:
-			printf("Console SET Indicator\r\n");
+			//printf("Console SET Indicator\r\n");
 			uartResp->command = OW_CTRL_SET_IND;
 			if(uartResp->reserved > 3){
 				uartResp->packet_type = OW_ERROR;
@@ -299,9 +301,33 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			}
 			break;
 		case OW_CTRL_GET_IND:
-			printf("Console GET Indicator\r\n");
+			//printf("Console GET Indicator\r\n");
 			uartResp->command = OW_CTRL_GET_IND;
 			uartResp->reserved = rgb_state;
+			break;
+		case OW_CTRL_SET_FAN:
+			//printf("Console Set Fan ADDR: 0x%02X SPEED: 0x%02X\r\n", cmd->addr, cmd->data[0]);
+			uartResp->command = OW_CTRL_SET_FAN;
+			if(cmd->addr > 1 || cmd->data_len != 1){
+				uartResp->packet_type = OW_ERROR;
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+			}else{
+				FAN_SetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2,  cmd->data[0]);
+			}
+			break;
+		case OW_CTRL_GET_FAN:
+			//printf("Console Get Fan ADDR: 0x%02X\r\n", cmd->addr);
+			uartResp->command = OW_CTRL_GET_FAN;
+			if(cmd->addr > 1){
+				uartResp->packet_type = OW_ERROR;
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+			}else{
+				last_fan_speed[cmd->addr] = FAN_GetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2);
+				uartResp->data_len = 1;
+				uartResp->data = &last_fan_speed[cmd->addr];
+			}
 			break;
 		default:
 			uartResp->data_len = 0;
@@ -327,24 +353,24 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 		switch(cmd->command)
 		{
 		case OW_CMD_PING:
-			printf("ping response\r\n");
+			//printf("ping response\r\n");
 			break;
 		case OW_CMD_NOP:
-			printf("NOP response\r\n");
+			//printf("NOP response\r\n");
 			break;
 		case OW_CMD_VERSION:
-			printf("Version response\r\n");
+			//printf("Version response\r\n");
 			uartResp->data_len = sizeof(FIRMWARE_VERSION_DATA);
 			uartResp->data = FIRMWARE_VERSION_DATA;
 			break;
 		case OW_CMD_ECHO:
 			// exact copy
-			printf("Echo response\r\n");
+			//printf("Echo response\r\n");
 			uartResp->data_len = cmd->data_len;
 			uartResp->data = cmd->data;
 			break;
 		case OW_CMD_HWID:
-			printf("HWID response\r\n");
+			//printf("HWID response\r\n");
 			id_words[0] = HAL_GetUIDw0();
 			id_words[1] = HAL_GetUIDw1();
 			id_words[2] = HAL_GetUIDw2();
@@ -352,7 +378,7 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->data = (uint8_t *)&id_words;
 			break;
 		case OW_CMD_TOGGLE_LED:
-			printf("Toggle LED\r\n");
+			//printf("Toggle LED\r\n");
 			HAL_GPIO_TogglePin(IND1_GPIO_Port, IND1_Pin);
 			break;
 		case OW_CTRL_START_TRIG:
@@ -395,7 +421,7 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			break;
 
 		case OW_CMD_RESET:
-			printf("Soft Reset\r\n");
+			//printf("Soft Reset\r\n");
 			uartResp->command = cmd->command;
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;

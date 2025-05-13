@@ -62,7 +62,7 @@ extern DMA_HandleTypeDef hdma_uart4_tx;
 /* USER CODE END 0 */
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
-                                        /**
+                                                            /**
   * Initializes the Global MSP.
   */
 void HAL_MspInit(void)
@@ -449,6 +449,28 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef* htim)
     /* USER CODE BEGIN TIM5_MspPostInit 1 */
 
     /* USER CODE END TIM5_MspPostInit 1 */
+  }
+  else if(htim->Instance==TIM15)
+  {
+    /* USER CODE BEGIN TIM15_MspPostInit 0 */
+
+    /* USER CODE END TIM15_MspPostInit 0 */
+
+    __HAL_RCC_GPIOE_CLK_ENABLE();
+    /**TIM15 GPIO Configuration
+    PE5     ------> TIM15_CH1
+    PE6     ------> TIM15_CH2
+    */
+    GPIO_InitStruct.Pin = FAN1_PWM_Pin|FAN2_PWM_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+    GPIO_InitStruct.Pull = GPIO_NOPULL;
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+    GPIO_InitStruct.Alternate = GPIO_AF4_TIM15;
+    HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+    /* USER CODE BEGIN TIM15_MspPostInit 1 */
+
+    /* USER CODE END TIM15_MspPostInit 1 */
   }
 
 }

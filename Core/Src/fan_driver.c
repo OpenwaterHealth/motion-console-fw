@@ -9,56 +9,81 @@
 
 #include <stdio.h>
 
+static uint8_t curr_fan_dutycycle[2] = {0};
+
 static void OW_FAN_Init(void)
 {
 
-  TIM_OC_InitTypeDef sConfigOC = {0};
-  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
+	  /* USER CODE BEGIN TIM15_Init 0 */
 
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
+	  /* USER CODE END TIM15_Init 0 */
 
-  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-  sConfigOC.Pulse = 0;
-  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
-  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-  sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
-  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-  if (HAL_TIM_PWM_ConfigChannel(&FAN_PWM_TIMER, &sConfigOC, FAN1_PWM_CHANNEL) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  if (HAL_TIM_PWM_ConfigChannel(&FAN_PWM_TIMER, &sConfigOC, FAN2_PWM_CHANNEL) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
-  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-  sBreakDeadTimeConfig.DeadTime = 0;
-  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
-  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
-  sBreakDeadTimeConfig.BreakFilter = 0;
-  sBreakDeadTimeConfig.Break2State = TIM_BREAK2_DISABLE;
-  sBreakDeadTimeConfig.Break2Polarity = TIM_BREAK2POLARITY_HIGH;
-  sBreakDeadTimeConfig.Break2Filter = 0;
-  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-  if (HAL_TIMEx_ConfigBreakDeadTime(&FAN_PWM_TIMER, &sBreakDeadTimeConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
+	  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+	  TIM_MasterConfigTypeDef sMasterConfig = {0};
+	  TIM_OC_InitTypeDef sConfigOC = {0};
+	  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
-  /* Enable GPIOE Clock */
-  __HAL_RCC_GPIOE_CLK_ENABLE();
+	  /* USER CODE BEGIN TIM15_Init 1 */
 
-  /* Configure GPIO Pins for TIM1 Channel 1 and Channel 2 */
-  GPIO_InitStruct.Pin = FAN1_PWM_Pin | FAN2_PWM_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;       // Alternate function, push-pull
-  GPIO_InitStruct.Pull = GPIO_NOPULL;          // No pull-up or pull-down
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Low speed is sufficient for PWM
-  GPIO_InitStruct.Alternate = GPIO_AF1_TIM1;   // Alternate function for TIM1
+	  /* USER CODE END TIM15_Init 1 */
+	  htim15.Instance = TIM15;
+	  htim15.Init.Prescaler = 60-1;
+	  htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
+	  htim15.Init.Period = 100-1;
+	  htim15.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+	  htim15.Init.RepetitionCounter = 0;
+	  htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+	  if (HAL_TIM_Base_Init(&htim15) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+	  if (HAL_TIM_ConfigClockSource(&htim15, &sClockSourceConfig) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  if (HAL_TIM_PWM_Init(&htim15) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+	  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+	  if (HAL_TIMEx_MasterConfigSynchronization(&htim15, &sMasterConfig) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+	  sConfigOC.Pulse = 50;
+	  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+	  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+	  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+	  sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
+	  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+	  if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+	  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+	  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+	  sBreakDeadTimeConfig.DeadTime = 0;
+	  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+	  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+	  sBreakDeadTimeConfig.BreakFilter = 0;
+	  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+	  if (HAL_TIMEx_ConfigBreakDeadTime(&htim15, &sBreakDeadTimeConfig) != HAL_OK)
+	  {
+	    Error_Handler();
+	  }
+	  /* USER CODE BEGIN TIM15_Init 2 */
 
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);      // Initialize GPIOE pins
+	  /* USER CODE END TIM15_Init 2 */
+	  HAL_TIM_MspPostInit(&htim15);
+
 
 }
 
@@ -77,14 +102,16 @@ static void OW_FAN_DeInit(void)
     HAL_GPIO_DeInit(FAN1_PWM_GPIO_Port, FAN1_PWM_Pin);
     HAL_GPIO_DeInit(FAN2_PWM_GPIO_Port, FAN2_PWM_Pin);
 
-    HAL_GPIO_WritePin(GPIOE, FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(FAN1_PWM_GPIO_Port, FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
 
     /*Configure GPIO pins : FAN1_PWM_Pin FAN2_PWM_Pin */
     GPIO_InitStruct.Pin = FAN1_PWM_Pin|FAN2_PWM_Pin;
     GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+    HAL_GPIO_Init(FAN1_PWM_GPIO_Port, &GPIO_InitStruct);
+
+    HAL_GPIO_WritePin(FAN1_PWM_GPIO_Port, FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
 
 }
 
@@ -110,7 +137,7 @@ void FAN_DeInit(void)
 void FAN_SetSpeed(uint32_t channel, uint8_t duty_cycle)
 {
     uint32_t pulse = 0;
-
+    uint8_t index = 0;
     // Check that the channel is valid
     if (channel != TIM_CHANNEL_1 && channel != TIM_CHANNEL_2) {
         printf("Invalid fan channel provided\r\n");
@@ -122,6 +149,11 @@ void FAN_SetSpeed(uint32_t channel, uint8_t duty_cycle)
         duty_cycle = 100;
     }
 
+    if(channel == TIM_CHANNEL_2) index = 1;
+    else index = 0;
+
+    curr_fan_dutycycle[index] = duty_cycle;
+
     // Calculate pulse width based on duty cycle
     pulse = (__HAL_TIM_GET_AUTORELOAD(&FAN_PWM_TIMER) + 1) * duty_cycle / 100;
 
@@ -129,6 +161,21 @@ void FAN_SetSpeed(uint32_t channel, uint8_t duty_cycle)
     __HAL_TIM_SET_COMPARE(&FAN_PWM_TIMER, channel, pulse);
 }
 
+uint8_t FAN_GetSpeed(uint32_t channel)
+{
+    uint8_t index = 0;
+
+    // Check that the channel is valid
+    if (channel != TIM_CHANNEL_1 && channel != TIM_CHANNEL_2) {
+        printf("Invalid fan channel provided\r\n");
+        return; // Invalid channel, do nothing
+    }
+
+    if(channel == TIM_CHANNEL_2) index = 1;
+    else index = 0;
+
+    return curr_fan_dutycycle[index];
+}
 
 uint32_t FAN_GetRPM(uint32_t channel)
 {

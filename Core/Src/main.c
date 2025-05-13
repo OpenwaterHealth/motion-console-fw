@@ -31,6 +31,7 @@
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
+#include "fan_driver.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -154,6 +155,25 @@ static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t lis
 }
 #endif
 
+void configure_pin_as_gpio_output(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin) {
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    // 1. Enable the GPIO clock
+    if (GPIOx == GPIOA) __HAL_RCC_GPIOA_CLK_ENABLE();
+    else if (GPIOx == GPIOB) __HAL_RCC_GPIOB_CLK_ENABLE();
+    else if (GPIOx == GPIOC) __HAL_RCC_GPIOC_CLK_ENABLE();
+    // Add other GPIO ports as needed
+
+    // 2. Configure the pin
+    GPIO_InitStruct.Pin = GPIO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;  // Push-pull output
+    // GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_OD; // For open-drain output
+    GPIO_InitStruct.Pull = GPIO_NOPULL;          // No pull-up or pull-down
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Or MEDIUM/HIGH/VERY_HIGH
+
+    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+}
+
 void delay_ms(uint32_t ms)
 {
 	printf("Clock: %ld\r\n", SystemCoreClock);
@@ -221,6 +241,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   init_dma_logging();
+  FAN_Init();
+
   // HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
   // HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
   HAL_GPIO_WritePin(SCL_CFG_GPIO_Port, SCL_CFG_Pin, GPIO_PIN_RESET);
@@ -276,12 +298,10 @@ int main(void)
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
-  FAN_Init();
 
   // configure PWM for trigger pulse
   const Trigger_Config_t myTriggerConfig = { 40, 1000, 100, 100 };
   Trigger_SetConfig(&myTriggerConfig);
-
 
 
 
@@ -877,14 +897,16 @@ static void MX_TIM15_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
+  TIM_OC_InitTypeDef sConfigOC = {0};
+  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
 
   /* USER CODE BEGIN TIM15_Init 1 */
 
   /* USER CODE END TIM15_Init 1 */
   htim15.Instance = TIM15;
-  htim15.Init.Prescaler = 12000-1;
+  htim15.Init.Prescaler = 60-1;
   htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim15.Init.Period = 5000-1;
+  htim15.Init.Period = 100-1;
   htim15.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim15.Init.RepetitionCounter = 0;
   htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
@@ -897,15 +919,47 @@ static void MX_TIM15_Init(void)
   {
     Error_Handler();
   }
+  if (HAL_TIM_PWM_Init(&htim15) != HAL_OK)
+  {
+    Error_Handler();
+  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim15, &sMasterConfig) != HAL_OK)
   {
     Error_Handler();
   }
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 50;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
+  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
+  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
+  if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
+  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
+  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
+  sBreakDeadTimeConfig.DeadTime = 0;
+  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
+  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
+  sBreakDeadTimeConfig.BreakFilter = 0;
+  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
+  if (HAL_TIMEx_ConfigBreakDeadTime(&htim15, &sBreakDeadTimeConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN TIM15_Init 2 */
 
   /* USER CODE END TIM15_Init 2 */
+  HAL_TIM_MspPostInit(&htim15);
 
 }
 
@@ -999,7 +1053,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, HUB_RESET_Pin|SDA_REM_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, SYS_EN_Pin|LED_ON_Pin|GPIO5_Pin|GPIO2_Pin, GPIO_PIN_RESET);
@@ -1023,10 +1077,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : nTRIG_Pin GPIO1_Pin GPIO0_Pin FAN1_PWM_Pin
-                           FAN2_PWM_Pin GPIO4_Pin GPIO3_Pin */
-  GPIO_InitStruct.Pin = nTRIG_Pin|GPIO1_Pin|GPIO0_Pin|FAN1_PWM_Pin
-                          |FAN2_PWM_Pin|GPIO4_Pin|GPIO3_Pin;
+  /*Configure GPIO pins : nTRIG_Pin GPIO1_Pin GPIO0_Pin GPIO4_Pin
+                           GPIO3_Pin */
+  GPIO_InitStruct.Pin = nTRIG_Pin|GPIO1_Pin|GPIO0_Pin|GPIO4_Pin
+                          |GPIO3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
