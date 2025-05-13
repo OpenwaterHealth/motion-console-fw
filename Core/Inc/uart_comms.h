@@ -18,5 +18,6 @@ void comms_receive_task(void *argument);
 void comms_handle_RxCpltCallback(UART_HandleTypeDef *huart, uint16_t Size);
 void comms_handle_TxCallback(UART_HandleTypeDef *huart);
 void CDC_handle_TxCpltCallback();
+void printUartPacket(const UartPacket* packet);
 
 #endif /* INC_UART_COMMS_H_ */

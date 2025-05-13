@@ -90,7 +90,7 @@ uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
 
 // Declare handles for your two multiplexers
-TCA9548A_HandleTypeDef iic_mux[2];
+extern TCA9548A_HandleTypeDef iic_mux[2];
 
 volatile bool _enter_dfu = false;
 
@@ -1103,7 +1103,6 @@ void StartDefaultTask(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	LED_Toggle(IND1_GPIO_Port, IND1_Pin);
 	osDelay(250);
   }
   /* USER CODE END 5 */

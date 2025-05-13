@@ -79,6 +79,7 @@ typedef enum {
 	OW_DATA = 0xE4,
 	OW_JSON = 0xE5,
 	OW_I2C_PASSTHRU = 0xE9,
+	OW_CONTROLLER = 0xEA,
 	OW_BAD_PARSE = 0xEC,
 	OW_BAD_CRC = 0xED,
 	OW_UNKNOWN = 0xEE,
@@ -87,6 +88,9 @@ typedef enum {
 } OWPacketTypes;
 
 typedef enum {
+	OW_CTRL_I2C_SCAN = 0x10,
+	OW_CTRL_SET_IND = 0x11,
+	OW_CTRL_GET_IND = 0x12,
 	OW_CTRL_SET_TRIG = 0x13,
 	OW_CTRL_GET_TRIG = 0x14,
 	OW_CTRL_START_TRIG = 0x15,

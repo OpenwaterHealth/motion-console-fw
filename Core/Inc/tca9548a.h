@@ -57,5 +57,6 @@ int8_t TCA9548A_GetCurrentChannel(TCA9548A_HandleTypeDef *hmux);
  */
 int8_t TCA9548A_DisableAll(TCA9548A_HandleTypeDef *hmux);
 
+int TCA9548A_scan_channel(uint8_t mux_index, uint8_t mux_channel, uint8_t* addr_list, size_t list_size, bool display);
 
 #endif /* INC_TCA9548A_H_ */

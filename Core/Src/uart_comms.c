@@ -14,7 +14,7 @@
 #include <string.h>
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
-
+#include "tca9548a.h"
 #include "trigger.h"
 
 // Private variables
@@ -33,9 +33,13 @@ extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
 static uint32_t id_words[3] = {0};
+static uint8_t i2c_list[10] = {0};
+
+volatile uint8_t rgb_state = 0; // 0 = off, 1 == IND1, 2 == IND2, 3 == IND3
 
 static char retTriggerJson[0xFF];
 
+static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd);
 
 const osThreadAttr_t comm_rec_task_attribs = {
   .name = "comRecTask",
@@ -43,7 +47,7 @@ const osThreadAttr_t comm_rec_task_attribs = {
   .priority = (osPriority_t) osPriorityHigh,
 };
 
-static void printUartPacket(const UartPacket* packet) {
+void printUartPacket(const UartPacket* packet) {
     if (!packet) {
         printf("Invalid packet (NULL pointer).\n");
         return;
@@ -74,7 +78,7 @@ static void UART_INTERFACE_SendDMA(UartPacket* pResp)
 {
     // Wait for semaphore availability before proceeding
 	if (xSemaphoreTake(uartTxSemaphore, portMAX_DELAY) == pdTRUE) {
-		printf("Sending Respopnse\r\n");
+		// printf("Sending Response\r\n");
 		// printf("send data\r\n");
 		memset(txBuffer, 0, sizeof(txBuffer));
 		int bufferIndex = 0;
@@ -123,7 +127,7 @@ void comms_receive_task(void *argument) {
 
     	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-		printf("data received\r\n");
+		// printf("data received\r\n");
 		int bufferIndex = 0;
 
 		if(rxBuffer[bufferIndex++] != OW_START_BYTE) {
@@ -202,7 +206,7 @@ void comms_receive_task(void *argument) {
 			resp.packet_type = OW_NAK;
 			goto NextDataPacket;
 		}
-		printUartPacket(&cmd);
+		// printUartPacket(&cmd);
 		process_if_command(&resp, &cmd);
 
 NextDataPacket:
@@ -234,6 +238,80 @@ void comms_init() {
 }
 
 
+static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
+{
+	_Bool ret = true;
+	int iRet = 0;
+	uartResp->command = cmd->command;
+	switch (cmd->command)
+	{
+		case OW_CTRL_I2C_SCAN:
+			printf("I2C Scan\r\n");
+			uartResp->command = OW_CTRL_I2C_SCAN;
+			if(cmd->data_len != 2){
+				uartResp->packet_type = OW_ERROR;
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+			}else{
+				printf("I2C Scan MUX: 0x%02X CH: 0x%02X \r\n", cmd->data[0], cmd->data[1]);
+				memset(i2c_list, 0, 10);
+				iRet = TCA9548A_scan_channel(cmd->data[0], cmd->data[1], i2c_list, 10, true);
+				if(iRet < 0){
+					// error
+					uartResp->packet_type = OW_ERROR;
+					uartResp->data_len = 0;
+					uartResp->data = NULL;
+				} else {
+					uartResp->data_len = (uint16_t)iRet;
+					uartResp->data = i2c_list;
+				}
+			}
+			break;
+		case OW_CTRL_SET_IND:
+			printf("Console SET Indicator\r\n");
+			uartResp->command = OW_CTRL_SET_IND;
+			if(uartResp->reserved > 3){
+				uartResp->packet_type = OW_ERROR;
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+			}
+			else
+			{
+				rgb_state = cmd->reserved;
+				HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+				switch(rgb_state)
+				{
+					case 1:
+						HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
+						break;
+					case 2:
+						HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
+						break;
+					case 3:
+						HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_SET);
+						break;
+					case 0:
+					default:
+						break;
+				}
+			}
+			break;
+		case OW_CTRL_GET_IND:
+			printf("Console GET Indicator\r\n");
+			uartResp->command = OW_CTRL_GET_IND;
+			uartResp->reserved = rgb_state;
+			break;
+		default:
+			uartResp->data_len = 0;
+			uartResp->packet_type = OW_UNKNOWN;
+			break;
+	}
+
+	return ret;
+}
+
 _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 {
 	uartResp->id = cmd->id;
@@ -255,15 +333,18 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			printf("NOP response\r\n");
 			break;
 		case OW_CMD_VERSION:
+			printf("Version response\r\n");
 			uartResp->data_len = sizeof(FIRMWARE_VERSION_DATA);
 			uartResp->data = FIRMWARE_VERSION_DATA;
 			break;
 		case OW_CMD_ECHO:
 			// exact copy
+			printf("Echo response\r\n");
 			uartResp->data_len = cmd->data_len;
 			uartResp->data = cmd->data;
 			break;
 		case OW_CMD_HWID:
+			printf("HWID response\r\n");
 			id_words[0] = HAL_GetUIDw0();
 			id_words[1] = HAL_GetUIDw1();
 			id_words[2] = HAL_GetUIDw2();
@@ -346,6 +427,8 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			break;
 		}
 		break;
+	case OW_CONTROLLER:
+		return process_controller_command(uartResp, cmd);
 	default:
 		uartResp->data_len = 0;
 		uartResp->packet_type = OW_UNKNOWN;
@@ -353,7 +436,7 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 		break;
 	}
 
-	return uartResp;
+	return true;
 }
 
 
@@ -368,11 +451,11 @@ void comms_handle_RxCpltCallback(UART_HandleTypeDef *huart, uint16_t pos) {
 
 void CDC_handle_RxCpltCallback(uint16_t len) {
 	rx_flag = 1;
-	printf("CDC_handle_RxCpltCallback enter\r\n");
+	// printf("CDC_handle_RxCpltCallback enter\r\n");
     BaseType_t xHigherPriorityTaskWoken = pdFALSE;
     vTaskNotifyGiveFromISR(commsTaskHandle, &xHigherPriorityTaskWoken);
     portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
-	printf("CDC_handle_RxCpltCallback exit\r\n");
+	// printf("CDC_handle_RxCpltCallback exit\r\n");
 }
 
 void CDC_handle_TxCpltCallback() {
