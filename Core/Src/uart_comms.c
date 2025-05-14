@@ -36,6 +36,8 @@ extern bool _enter_dfu;
 static uint8_t last_fan_speed[2] = {0};
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
+static uint8_t i2c_data[0xff] = {0};
+
 
 volatile uint8_t rgb_state = 0; // 0 = off, 1 == IND1, 2 == IND2, 3 == IND3
 
@@ -327,6 +329,57 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				last_fan_speed[cmd->addr] = FAN_GetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2);
 				uartResp->data_len = 1;
 				uartResp->data = &last_fan_speed[cmd->addr];
+			}
+			break;
+		case OW_CTRL_I2C_RD:
+			uartResp->command = OW_CTRL_GET_FAN;
+			if(cmd->data_len != 5) {
+				uartResp->packet_type = OW_ERROR;
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+			} else {
+				uint8_t mux_index = cmd->data[0];
+				uint8_t channel = cmd->data[1];
+				uint8_t i2c_addr = cmd->data[2];
+				uint8_t reg_addr = cmd->data[3];
+				uint8_t data_len = cmd->data[4];
+				memset(i2c_data, 0, 0xff); // clear buffer
+				// printf("I2C Read MUX: 0x%02X CHANNEL: 0x%02X I2C ADDR: 0x%02X REGISTER: 0x%02X DATA_LEN: 0x%02X\r\n", mux_index, channel, i2c_addr, reg_addr, data_len);
+				int8_t ret = TCA9548A_Read_Data(mux_index, channel, i2c_addr, reg_addr, data_len, i2c_data);
+				if (ret!= TCA9548A_OK) {
+					printf("error selecting channel\r\n");
+					uartResp->packet_type = OW_ERROR;
+					uartResp->data_len = 0;
+					uartResp->data = NULL;
+				} else {
+					uartResp->data_len = data_len;
+					uartResp->data = i2c_data;
+				}
+			}
+			break;
+		case OW_CTRL_I2C_WR:
+			uartResp->command = OW_CTRL_I2C_WR;
+			if(cmd->data_len < 5) {
+				uartResp->packet_type = OW_ERROR;
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+			} else {
+				uint8_t mux_index = cmd->data[0];
+				uint8_t channel = cmd->data[1];
+				uint8_t i2c_addr = cmd->data[2];
+				uint8_t reg_addr = cmd->data[3];
+				uint8_t data_len = cmd->data[4];
+				uint8_t *pData = &cmd->data[5];
+				// printf("I2C Write MUX: 0x%02X CHANNEL: 0x%02X I2C ADDR: 0x%02X REGISTER: 0x%02X DATA_LEN: 0x%02X\r\n",mux_index, channel, i2c_addr, reg_addr, data_len);
+				// printf("Data to Write\r\n");
+				// printBuffer(pData, data_len);
+				int8_t ret = TCA9548A_Write_Data(mux_index, channel, i2c_addr, reg_addr, data_len, pData);
+				if (ret!= TCA9548A_OK) {
+					printf("error selecting channel\r\n");
+					uartResp->packet_type = OW_ERROR;
+					uartResp->data_len = 0;
+					uartResp->data = NULL;
+				}
 			}
 			break;
 		default:

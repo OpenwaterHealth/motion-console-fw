@@ -28,35 +28,38 @@ typedef struct {
 
 /**
  * @brief Initializes the TCA9548A multiplexer
- * @param hmux Pointer to TCA9548A handle structure
+ * @param mux index to TCA9548A
  * @param hi2c Pointer to I2C handle
  * @param address I2C address of the multiplexer
  * @return TCA9548A_OK on success, error code otherwise
  */
-int8_t TCA9548A_Init(TCA9548A_HandleTypeDef *hmux, I2C_HandleTypeDef *hi2c, uint8_t address);
+int8_t TCA9548A_Init(uint8_t mux_index, I2C_HandleTypeDef *hi2c, uint8_t address);
 
 /**
  * @brief Selects a channel on the multiplexer
- * @param hmux Pointer to TCA9548A handle structure
+ * @param mux index to TCA9548A
  * @param channel Channel to select (0-7)
  * @return TCA9548A_OK on success, error code otherwise
  */
-int8_t TCA9548A_SelectChannel(TCA9548A_HandleTypeDef *hmux, uint8_t channel);
+int8_t TCA9548A_SelectChannel(uint8_t mux_index, uint8_t channel);
 
 /**
  * @brief Gets the currently selected channel
- * @param hmux Pointer to TCA9548A handle structure
+ * @param mux index to TCA9548A
  * @return Currently selected channel (0-7) or error code
  */
-int8_t TCA9548A_GetCurrentChannel(TCA9548A_HandleTypeDef *hmux);
+int8_t TCA9548A_GetCurrentChannel(uint8_t mux_index);
 
 /**
  * @brief Disables all channels (no channel selected)
- * @param hmux Pointer to TCA9548A handle structure
+ * @para mmux index to TCA9548A
  * @return TCA9548A_OK on success, error code otherwise
  */
-int8_t TCA9548A_DisableAll(TCA9548A_HandleTypeDef *hmux);
+int8_t TCA9548A_DisableAll(uint8_t mux_index);
 
 int TCA9548A_scan_channel(uint8_t mux_index, uint8_t mux_channel, uint8_t* addr_list, size_t list_size, bool display);
+
+int8_t TCA9548A_Write_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, uint8_t mem_addr, uint8_t data_len, uint8_t* pData);
+int8_t TCA9548A_Read_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, uint8_t mem_addr, uint8_t data_len, uint8_t* pData);
 
 #endif /* INC_TCA9548A_H_ */

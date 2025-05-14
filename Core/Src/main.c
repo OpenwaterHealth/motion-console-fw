@@ -85,7 +85,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 2};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 3};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -241,7 +241,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
 
   init_dma_logging();
-  FAN_Init();
 
   // HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
   // HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
@@ -262,6 +261,7 @@ int main(void)
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
 
+  FAN_Init();
   LED_Init();
 
 #ifdef SCAN_DISPLAY
@@ -275,7 +275,7 @@ int main(void)
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
   {
-	  if (TCA9548A_Init(&iic_mux[i], i==0?&hi2c1:&hi2c2, TCA9548A_DEFAULT_ADDRESS) != TCA9548A_OK) {
+	  if (TCA9548A_Init(i, i==0?&hi2c1:&hi2c2, TCA9548A_DEFAULT_ADDRESS) != TCA9548A_OK) {
 	      printf("Failed to initialize MUX1 on I2C1\r\n");
 	      iic_mux[i].initialized = false;
 	  } else {
@@ -283,7 +283,7 @@ int main(void)
 	      iic_mux[i].initialized = true;
 #ifdef SCAN_DISPLAY
 	      for(int x=0; x<8; x++){
-			if (TCA9548A_SelectChannel(&iic_mux[i], x) != TCA9548A_OK) {
+			if (TCA9548A_SelectChannel(i, x) != TCA9548A_OK) {
 				printf("error selecting channel %d\r\n", x);
 			} else {
 				printf("Scan MUX%d channel %d\r\n",i+1, x);
