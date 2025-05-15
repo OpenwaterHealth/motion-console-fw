@@ -332,7 +332,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			}
 			break;
 		case OW_CTRL_I2C_RD:
-			uartResp->command = OW_CTRL_GET_FAN;
+			uartResp->command = OW_CTRL_I2C_RD;
 			if(cmd->data_len != 5) {
 				uartResp->packet_type = OW_ERROR;
 				uartResp->data_len = 0;
