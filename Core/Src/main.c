@@ -30,6 +30,7 @@
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
+#include "fan_driver.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -91,6 +92,7 @@ uint8_t txBuffer[COMMAND_MAX_SIZE];
 
 // Declare handles for your two multiplexers
 extern TCA9548A_HandleTypeDef iic_mux[2];
+extern FAN_Driver fan;
 
 volatile bool _enter_dfu = false;
 
@@ -270,6 +272,10 @@ int main(void)
 
   printf("I2C2\r\n");
   I2C_scan(&hi2c2, NULL, 0, true);
+
+  printf("I2C4\r\n");
+  I2C_scan(&hi2c4, NULL, 0, true);
+
 #endif
 
   // Initialize first multiplexer on I2C1 with default address
@@ -294,6 +300,23 @@ int main(void)
 	  }
 
   }
+
+  FAN_Init(&fan, &hi2c4, 0x2C);
+
+  uint8_t fan_dev_id = FAN_ReadDeviceID(&fan);
+  uint8_t fan_mfg_id = FAN_ReadManufacturerID(&fan);
+  if(fan_dev_id != MAX6663_DEVICE_ID && fan_mfg_id != MAX6663_MAN_ID) {
+	  printf("Failed to initialize Fan IC\r\n");
+  } else {
+	  printf("MAX6663 Device ID: 0x%02X, Manufacturer ID: 0x%02X\r\n", fan_dev_id, fan_mfg_id);
+
+	  if(!FAN_EnableMonitoring(&fan)){
+		  printf("Failed to enable fan monitoring\r\n");
+	  }
+
+	  FAN_SetManualPWM(&fan, 10);
+  }
+
 
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
@@ -1077,9 +1100,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOA, SCL_CFG_Pin|IND1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(FULL_ON_n_GPIO_Port, FULL_ON_n_Pin, GPIO_PIN_SET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, IO_EXP_RSTN_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : HUB_RESET_Pin SDA_REM_Pin */
@@ -1103,15 +1123,15 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : IND3_Pin IND2_Pin FULL_ON_n_Pin enSyncIN_Pin */
-  GPIO_InitStruct.Pin = IND3_Pin|IND2_Pin|FULL_ON_n_Pin|enSyncIN_Pin;
+  /*Configure GPIO pins : IND3_Pin IND2_Pin enSyncIN_Pin */
+  GPIO_InitStruct.Pin = IND3_Pin|IND2_Pin|enSyncIN_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SP_GPIO2_Pin SP_GPIO1_Pin */
-  GPIO_InitStruct.Pin = SP_GPIO2_Pin|SP_GPIO1_Pin;
+  /*Configure GPIO pins : SP_GPIO2_Pin FULL_ON_n_Pin SP_GPIO1_Pin */
+  GPIO_InitStruct.Pin = SP_GPIO2_Pin|FULL_ON_n_Pin|SP_GPIO1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);

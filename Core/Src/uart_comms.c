@@ -16,6 +16,7 @@
 #include "cmsis_os.h"
 #include "tca9548a.h"
 #include "trigger.h"
+#include "fan_driver.h"
 
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
@@ -29,10 +30,11 @@ SemaphoreHandle_t uartTxSemaphore;
 SemaphoreHandle_t xRxSemaphore;
 TaskHandle_t commsTaskHandle;
 
+extern FAN_Driver fan;
 extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
-static uint8_t last_fan_speed[2] = {0};
+static uint8_t last_fan_speed = 0;
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
@@ -314,7 +316,8 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				uartResp->data_len = 0;
 				uartResp->data = NULL;
 			}else{
-				// FAN_SetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2,  cmd->data[0]);
+				printf("Set fan to: %d\r\n", cmd->data[0]);
+				FAN_SetManualPWM(&fan, cmd->data[0]);
 			}
 			break;
 		case OW_CTRL_GET_FAN:
@@ -325,9 +328,9 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				uartResp->data_len = 0;
 				uartResp->data = NULL;
 			}else{
-				//last_fan_speed[cmd->addr] = FAN_GetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2);
+				last_fan_speed = FAN_GetPWMDuty(&fan);
 				uartResp->data_len = 1;
-				uartResp->data = &last_fan_speed[cmd->addr];
+				uartResp->data = &last_fan_speed;
 			}
 			break;
 		case OW_CTRL_I2C_RD:
