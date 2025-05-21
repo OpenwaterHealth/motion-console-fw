@@ -15,7 +15,6 @@
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
 #include "tca9548a.h"
-#include "fan_driver.h"
 #include "trigger.h"
 
 // Private variables
@@ -315,7 +314,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				uartResp->data_len = 0;
 				uartResp->data = NULL;
 			}else{
-				FAN_SetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2,  cmd->data[0]);
+				// FAN_SetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2,  cmd->data[0]);
 			}
 			break;
 		case OW_CTRL_GET_FAN:
@@ -326,7 +325,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				uartResp->data_len = 0;
 				uartResp->data = NULL;
 			}else{
-				last_fan_speed[cmd->addr] = FAN_GetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2);
+				//last_fan_speed[cmd->addr] = FAN_GetSpeed(cmd->addr==0?TIM_CHANNEL_1:TIM_CHANNEL_2);
 				uartResp->data_len = 1;
 				uartResp->data = &last_fan_speed[cmd->addr];
 			}
@@ -432,7 +431,7 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			break;
 		case OW_CMD_TOGGLE_LED:
 			//printf("Toggle LED\r\n");
-			HAL_GPIO_TogglePin(IND1_GPIO_Port, IND1_Pin);
+			HAL_GPIO_TogglePin(LED_ON_GPIO_Port, LED_ON_Pin);
 			break;
 		case OW_CTRL_START_TRIG:
 			printf("Start Trigger\r\n");
