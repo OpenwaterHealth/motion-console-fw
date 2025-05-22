@@ -390,7 +390,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
 
-			if(!Trigger_SetConfigFromJSON((char *)cmd->data, cmd->data_len))
+			if(Trigger_SetConfigFromJSON((char *)cmd->data, cmd->data_len) != HAL_OK)
 			{
 				uartResp->packet_type = OW_ERROR;
 			}else{
