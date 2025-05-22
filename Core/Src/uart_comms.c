@@ -384,6 +384,57 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				}
 			}
 			break;
+		case OW_CTRL_SET_TRIG:
+			uartResp->command = OW_CTRL_SET_TRIG;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 0;
+
+			if(!Trigger_SetConfigFromJSON((char *)cmd->data, cmd->data_len))
+			{
+				uartResp->packet_type = OW_ERROR;
+			}else{
+				// refresh state
+				memset(retTriggerJson, 0, sizeof(retTriggerJson));
+				if(Trigger_GetConfigToJSON(retTriggerJson, 0xFF) != HAL_OK)
+				{
+					uartResp->packet_type = OW_ERROR;
+				}else{
+					uartResp->data_len = strlen(retTriggerJson);
+					uartResp->data = (uint8_t *)retTriggerJson;
+				}
+			}
+
+			break;
+
+		case OW_CTRL_GET_TRIG:
+			uartResp->command = OW_CTRL_GET_TRIG;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 0;
+			memset(retTriggerJson, 0, sizeof(retTriggerJson));
+			if(Trigger_GetConfigToJSON(retTriggerJson, 0xFF) != HAL_OK)
+			{
+				uartResp->packet_type = OW_ERROR;
+			}else{
+				uartResp->data_len = strlen(retTriggerJson);
+				uartResp->data = (uint8_t *)retTriggerJson;
+			}
+			break;
+		case OW_CTRL_START_TRIG:
+			uartResp->command = OW_CTRL_START_TRIG;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 0;
+			Trigger_Start();
+			break;
+		case OW_CTRL_STOP_TRIG:
+			uartResp->command = OW_CTRL_STOP_TRIG;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 0;
+			Trigger_Stop();
+			break;
 		default:
 			uartResp->data_len = 0;
 			uartResp->packet_type = OW_UNKNOWN;
@@ -436,45 +487,6 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			//printf("Toggle LED\r\n");
 			HAL_GPIO_TogglePin(LED_ON_GPIO_Port, LED_ON_Pin);
 			break;
-		case OW_CTRL_START_TRIG:
-			printf("Start Trigger\r\n");
-			uartResp->command = cmd->command;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-			Trigger_Start();
-			break;
-		case OW_CTRL_STOP_TRIG:
-			printf("Stop Trigger\r\n");
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-			Trigger_Stop();
-			break;
-		case OW_CTRL_SET_TRIG:
-			printf("Set Trigger\r\n");
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-
-			if(!Trigger_SetConfigFromJSON((char *)cmd->data, cmd->data_len))
-			{
-				uartResp->packet_type = OW_ERROR;
-			}
-
-			break;
-
-		case OW_CTRL_GET_TRIG:
-			printf("Get Trigger\r\n");
-			memset(retTriggerJson, 0, sizeof(retTriggerJson));
-			Trigger_GetConfigToJSON(retTriggerJson);
-
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = strlen(retTriggerJson);
-			uartResp->data = (uint8_t *)retTriggerJson;
-			break;
-
 		case OW_CMD_RESET:
 			//printf("Soft Reset\r\n");
 			uartResp->command = cmd->command;

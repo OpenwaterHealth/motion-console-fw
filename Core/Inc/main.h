@@ -118,7 +118,7 @@ void Error_Handler(void);
 
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
-extern TIM_HandleTypeDef htim5;
+extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim12;
 extern TIM_HandleTypeDef htim15;
 
@@ -128,12 +128,10 @@ extern UART_HandleTypeDef huart4;
 #define DEBUG_UART huart4
 
 #define FAN_PWM_TIMER htim15  //
-#define LASER_TIMER htim5
-#define LASER_TIMER_CHAN TIM_CHANNEL_2
-#define FSYNC_TIMER htim3
+#define LASER_TIMER htim3
+#define LASER_TIMER_CHAN TIM_CHANNEL_1
+#define FSYNC_TIMER htim2
 #define FSYNC_TIMER_CHAN TIM_CHANNEL_1
-#define SYNC_TIMER htim4
-#define SYNC_TIMER_CHAN TIM_CHANNEL_1
 
 /* USER CODE END Private defines */
 
