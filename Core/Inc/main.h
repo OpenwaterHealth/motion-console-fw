@@ -65,16 +65,14 @@ void Error_Handler(void);
 #define nTRIG_GPIO_Port GPIOE
 #define SYS_EN_Pin GPIO_PIN_9
 #define SYS_EN_GPIO_Port GPIOB
-#define GPIO1_Pin GPIO_PIN_3
-#define GPIO1_GPIO_Port GPIOE
 #define LED_ON_Pin GPIO_PIN_8
 #define LED_ON_GPIO_Port GPIOB
 #define IND3_Pin GPIO_PIN_5
 #define IND3_GPIO_Port GPIOD
-#define GPIO0_Pin GPIO_PIN_4
-#define GPIO0_GPIO_Port GPIOE
-#define FAN1_PWM_Pin GPIO_PIN_5
-#define FAN1_PWM_GPIO_Port GPIOE
+#define SP_GPIO2_Pin GPIO_PIN_2
+#define SP_GPIO2_GPIO_Port GPIOD
+#define FAN_TOP_GD2_Pin GPIO_PIN_1
+#define FAN_TOP_GD2_GPIO_Port GPIOE
 #define MCU_GPIO1_Pin GPIO_PIN_0
 #define MCU_GPIO1_GPIO_Port GPIOE
 #define IND2_Pin GPIO_PIN_4
@@ -83,32 +81,34 @@ void Error_Handler(void);
 #define DBG_RX_GPIO_Port GPIOD
 #define SCL_CFG_Pin GPIO_PIN_8
 #define SCL_CFG_GPIO_Port GPIOA
-#define FAN2_TACH_Pin GPIO_PIN_10
-#define FAN2_TACH_GPIO_Port GPIOA
-#define FAN2_PWM_Pin GPIO_PIN_6
-#define FAN2_PWM_GPIO_Port GPIOE
 #define DBG_TX_Pin GPIO_PIN_1
 #define DBG_TX_GPIO_Port GPIOD
 #define SDA_REM_Pin GPIO_PIN_9
 #define SDA_REM_GPIO_Port GPIOC
+#define FAN_TOP_GD1_Pin GPIO_PIN_7
+#define FAN_TOP_GD1_GPIO_Port GPIOC
+#define SP_GPIO3_Pin GPIO_PIN_8
+#define SP_GPIO3_GPIO_Port GPIOC
 #define TA_TRIGGER_Pin GPIO_PIN_6
 #define TA_TRIGGER_GPIO_Port GPIOC
 #define FSYNC_Pin GPIO_PIN_0
 #define FSYNC_GPIO_Port GPIOA
-#define GPIO4_Pin GPIO_PIN_7
-#define GPIO4_GPIO_Port GPIOE
+#define SYNC_IN_Pin GPIO_PIN_4
+#define SYNC_IN_GPIO_Port GPIOC
+#define SYNC_OUT_Pin GPIO_PIN_5
+#define SYNC_OUT_GPIO_Port GPIOC
+#define POWER_DETECT_Pin GPIO_PIN_15
+#define POWER_DETECT_GPIO_Port GPIOE
+#define FULL_ON_n_Pin GPIO_PIN_10
+#define FULL_ON_n_GPIO_Port GPIOD
 #define IO_EXP_RSTN_Pin GPIO_PIN_2
 #define IO_EXP_RSTN_GPIO_Port GPIOA
-#define GPIO5_Pin GPIO_PIN_0
-#define GPIO5_GPIO_Port GPIOB
-#define GPIO3_Pin GPIO_PIN_8
-#define GPIO3_GPIO_Port GPIOE
+#define SP_GPIO1_Pin GPIO_PIN_9
+#define SP_GPIO1_GPIO_Port GPIOD
 #define IND1_Pin GPIO_PIN_3
 #define IND1_GPIO_Port GPIOA
 #define enSyncOUT_Pin GPIO_PIN_7
 #define enSyncOUT_GPIO_Port GPIOA
-#define GPIO2_Pin GPIO_PIN_1
-#define GPIO2_GPIO_Port GPIOB
 #define FAN1_TACH_Pin GPIO_PIN_9
 #define FAN1_TACH_GPIO_Port GPIOE
 #define enSyncIN_Pin GPIO_PIN_8
@@ -118,7 +118,7 @@ void Error_Handler(void);
 
 extern TIM_HandleTypeDef htim3;
 extern TIM_HandleTypeDef htim4;
-extern TIM_HandleTypeDef htim5;
+extern TIM_HandleTypeDef htim2;
 extern TIM_HandleTypeDef htim12;
 extern TIM_HandleTypeDef htim15;
 
@@ -128,12 +128,10 @@ extern UART_HandleTypeDef huart4;
 #define DEBUG_UART huart4
 
 #define FAN_PWM_TIMER htim15  //
-#define LASER_TIMER htim5
-#define LASER_TIMER_CHAN TIM_CHANNEL_2
-#define FSYNC_TIMER htim3
+#define LASER_TIMER htim3
+#define LASER_TIMER_CHAN TIM_CHANNEL_1
+#define FSYNC_TIMER htim2
 #define FSYNC_TIMER_CHAN TIM_CHANNEL_1
-#define SYNC_TIMER htim4
-#define SYNC_TIMER_CHAN TIM_CHANNEL_1
 
 /* USER CODE END Private defines */
 

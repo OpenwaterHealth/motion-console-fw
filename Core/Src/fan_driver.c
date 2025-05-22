@@ -1,203 +1,139 @@
 /*
  * fan_driver.c
  *
- *  Created on: Nov 22, 2024
- *      Author: GeorgeVigelette
+ *  Created on: May 21, 2025
+ *      Author: gvigelet
  */
+
 #include "fan_driver.h"
-#include "main.h"
 
-#include <stdio.h>
+FAN_Driver fan;
 
-static uint8_t curr_fan_dutycycle[2] = {0};
-
-static void OW_FAN_Init(void)
-{
-
-	  /* USER CODE BEGIN TIM15_Init 0 */
-
-	  /* USER CODE END TIM15_Init 0 */
-
-	  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-	  TIM_MasterConfigTypeDef sMasterConfig = {0};
-	  TIM_OC_InitTypeDef sConfigOC = {0};
-	  TIM_BreakDeadTimeConfigTypeDef sBreakDeadTimeConfig = {0};
-
-	  /* USER CODE BEGIN TIM15_Init 1 */
-
-	  /* USER CODE END TIM15_Init 1 */
-	  htim15.Instance = TIM15;
-	  htim15.Init.Prescaler = 60-1;
-	  htim15.Init.CounterMode = TIM_COUNTERMODE_UP;
-	  htim15.Init.Period = 100-1;
-	  htim15.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	  htim15.Init.RepetitionCounter = 0;
-	  htim15.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	  if (HAL_TIM_Base_Init(&htim15) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-	  if (HAL_TIM_ConfigClockSource(&htim15, &sClockSourceConfig) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  if (HAL_TIM_PWM_Init(&htim15) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	  if (HAL_TIMEx_MasterConfigSynchronization(&htim15, &sMasterConfig) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	  sConfigOC.Pulse = 50;
-	  sConfigOC.OCPolarity = TIM_OCPOLARITY_LOW;
-	  sConfigOC.OCNPolarity = TIM_OCNPOLARITY_HIGH;
-	  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	  sConfigOC.OCIdleState = TIM_OCIDLESTATE_SET;
-	  sConfigOC.OCNIdleState = TIM_OCNIDLESTATE_RESET;
-	  if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  if (HAL_TIM_PWM_ConfigChannel(&htim15, &sConfigOC, TIM_CHANNEL_2) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  sBreakDeadTimeConfig.OffStateRunMode = TIM_OSSR_DISABLE;
-	  sBreakDeadTimeConfig.OffStateIDLEMode = TIM_OSSI_DISABLE;
-	  sBreakDeadTimeConfig.LockLevel = TIM_LOCKLEVEL_OFF;
-	  sBreakDeadTimeConfig.DeadTime = 0;
-	  sBreakDeadTimeConfig.BreakState = TIM_BREAK_DISABLE;
-	  sBreakDeadTimeConfig.BreakPolarity = TIM_BREAKPOLARITY_HIGH;
-	  sBreakDeadTimeConfig.BreakFilter = 0;
-	  sBreakDeadTimeConfig.AutomaticOutput = TIM_AUTOMATICOUTPUT_DISABLE;
-	  if (HAL_TIMEx_ConfigBreakDeadTime(&htim15, &sBreakDeadTimeConfig) != HAL_OK)
-	  {
-	    Error_Handler();
-	  }
-	  /* USER CODE BEGIN TIM15_Init 2 */
-
-	  /* USER CODE END TIM15_Init 2 */
-	  HAL_TIM_MspPostInit(&htim15);
-
-
+static bool fan_write(FAN_Driver *dev, uint8_t reg, uint8_t value) {
+    return HAL_I2C_Mem_Write(dev->hi2c, dev->i2c_addr, reg, 1, &value, 1, HAL_MAX_DELAY) == HAL_OK;
 }
 
-static void OW_FAN_DeInit(void)
-{
-	GPIO_InitTypeDef GPIO_InitStruct = {0};
-
-    // Stop the PWM channels for TIM1
-    HAL_TIM_PWM_Stop(&FAN_PWM_TIMER, TIM_CHANNEL_1);
-    HAL_TIM_PWM_Stop(&FAN_PWM_TIMER, TIM_CHANNEL_2);
-
-    // Deinitialize TIM1
-    HAL_TIM_PWM_DeInit(&FAN_PWM_TIMER);
-
-    // Disable the GPIO pins used for FAN1 and FAN2 PWM
-    HAL_GPIO_DeInit(FAN1_PWM_GPIO_Port, FAN1_PWM_Pin);
-    HAL_GPIO_DeInit(FAN2_PWM_GPIO_Port, FAN2_PWM_Pin);
-
-    HAL_GPIO_WritePin(FAN1_PWM_GPIO_Port, FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
-
-    /*Configure GPIO pins : FAN1_PWM_Pin FAN2_PWM_Pin */
-    GPIO_InitStruct.Pin = FAN1_PWM_Pin|FAN2_PWM_Pin;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    HAL_GPIO_Init(FAN1_PWM_GPIO_Port, &GPIO_InitStruct);
-
-    HAL_GPIO_WritePin(FAN1_PWM_GPIO_Port, FAN1_PWM_Pin|FAN2_PWM_Pin, GPIO_PIN_SET);
-
+static bool fan_read(FAN_Driver *dev, uint8_t reg, uint8_t *value) {
+    return HAL_I2C_Mem_Read(dev->hi2c, dev->i2c_addr, reg, 1, value, 1, HAL_MAX_DELAY) == HAL_OK;
 }
 
-void FAN_Init(void)
-{
-	printf("Initializing Fans\r\n");
-	OW_FAN_Init();
-
-	FAN_SetSpeed(FAN1_PWM_CHANNEL, 0);
-	FAN_SetSpeed(FAN2_PWM_CHANNEL, 0);
-
-	HAL_TIM_PWM_Start(&FAN_PWM_TIMER, FAN1_PWM_CHANNEL);
-	HAL_TIM_PWM_Start(&FAN_PWM_TIMER, FAN2_PWM_CHANNEL);
-
+void FAN_Init(FAN_Driver *dev, I2C_HandleTypeDef *hi2c, uint8_t addr) {
+    dev->hi2c = hi2c;
+    dev->i2c_addr = addr << 1; // STM HAL uses 8-bit addr
 }
 
-void FAN_DeInit(void)
-{
-	printf("De-Initializing Fans\r\n");
-	OW_FAN_DeInit();
+bool FAN_EnableMonitoring(FAN_Driver *dev) {
+    uint8_t config;
+    if (!fan_read(dev, MAX6663_REG_CONFIG1, &config)) return false;
+
+    config = 0x01; // Bit 0 = Monitoring enable
+    return fan_write(dev, MAX6663_REG_CONFIG1, config);
 }
 
-void FAN_SetSpeed(uint32_t channel, uint8_t duty_cycle)
-{
-    uint32_t pulse = 0;
-    uint8_t index = 0;
-    // Check that the channel is valid
-    if (channel != TIM_CHANNEL_1 && channel != TIM_CHANNEL_2) {
-        printf("Invalid fan channel provided\r\n");
-        return; // Invalid channel, do nothing
+bool FAN_SetPWMDuty(FAN_Driver *dev, uint8_t duty_code) {
+    if (duty_code > 0x0F) return false;
+
+    return fan_write(dev, MAX6663_REG_PWM_CONFIG, duty_code);
+}
+
+bool FAN_SetManualPWM(FAN_Driver *dev, uint8_t duty_percent) {
+    uint8_t duty_code;
+
+    if (duty_percent > 100) duty_percent = 100;
+
+    // Map percentage to duty code (Table 9 in datasheet)
+    if      (duty_percent >= 93) duty_code = 0xE;
+    else if (duty_percent >= 87) duty_code = 0xD;
+    else if (duty_percent >= 80) duty_code = 0xC;
+    else if (duty_percent >= 73) duty_code = 0xB;
+    else if (duty_percent >= 67) duty_code = 0xA;
+    else if (duty_percent >= 60) duty_code = 0x9;
+    else if (duty_percent >= 53) duty_code = 0x8;
+    else if (duty_percent >= 47) duty_code = 0x7;
+    else if (duty_percent >= 40) duty_code = 0x6;
+    else if (duty_percent >= 33) duty_code = 0x5;
+    else if (duty_percent >= 27) duty_code = 0x4;
+    else if (duty_percent >= 20) duty_code = 0x3;
+    else if (duty_percent >= 14) duty_code = 0x2;
+    else if (duty_percent >= 7)  duty_code = 0x1;
+    else                         duty_code = 0x0;
+
+    // Set mode: PWM control mode, monitoring on
+    uint8_t config1 = 0x01; // Bit 0 = monitoring enabled, bits 7:5 = 000 (PWM mode)
+    if (!fan_write(dev, MAX6663_REG_CONFIG1, config1)) return false;
+
+    // Write duty cycle
+    return fan_write(dev, MAX6663_REG_PWM_CONFIG, duty_code);
+}
+
+uint8_t FAN_GetPWMDuty(FAN_Driver *dev) {
+    uint8_t reg;
+    if (!fan_read(dev, MAX6663_REG_PWM_CONFIG, &reg)) return -1;
+
+    switch (reg & 0x0F) {
+        case 0x0: return 0;
+        case 0x1: return 7;
+        case 0x2: return 14;
+        case 0x3: return 20;
+        case 0x4: return 27;
+        case 0x5: return 33;
+        case 0x6: return 40;
+        case 0x7: return 47;
+        case 0x8: return 53;
+        case 0x9: return 60;
+        case 0xA: return 67;
+        case 0xB: return 73;
+        case 0xC: return 80;
+        case 0xD: return 87;
+        case 0xE: return 93;
+        case 0xF: return 100;
+        default: return 0;
     }
-
-    // Ensure duty cycle is within 0-100%
-    if (duty_cycle > 100) {
-        duty_cycle = 100;
-    }
-
-    if(channel == TIM_CHANNEL_2) index = 1;
-    else index = 0;
-
-    curr_fan_dutycycle[index] = duty_cycle;
-
-    // Calculate pulse width based on duty cycle
-    pulse = (__HAL_TIM_GET_AUTORELOAD(&FAN_PWM_TIMER) + 1) * duty_cycle / 100;
-
-    // Set PWM duty cycle for the specified fan
-    __HAL_TIM_SET_COMPARE(&FAN_PWM_TIMER, channel, pulse);
 }
 
-uint8_t FAN_GetSpeed(uint32_t channel)
-{
-    uint8_t index = 0;
-
-    // Check that the channel is valid
-    if (channel != TIM_CHANNEL_1 && channel != TIM_CHANNEL_2) {
-        printf("Invalid fan channel provided\r\n");
-        return; // Invalid channel, do nothing
-    }
-
-    if(channel == TIM_CHANNEL_2) index = 1;
-    else index = 0;
-
-    return curr_fan_dutycycle[index];
+int8_t FAN_ReadLocalTemp(FAN_Driver *dev) {
+    uint8_t val;
+    if (!fan_read(dev, MAX6663_REG_TEMP_LOCAL, &val)) return -128;
+    return (int8_t)val;
 }
 
-uint32_t FAN_GetRPM(uint32_t channel)
-{
-    uint32_t pulse_count = 0;
-    uint32_t rpm = 0;
-    // Check that the channel is valid
-    if (channel != TIM_CHANNEL_1 && channel != TIM_CHANNEL_2) {
-        printf("Invalid fan channel provided\r\n");
-        return 0; // Invalid channel, do nothing
-    }
+int8_t FAN_ReadRemoteTemp(FAN_Driver *dev) {
+    uint8_t val;
+    if (!fan_read(dev, MAX6663_REG_TEMP_REMOTE, &val)) return -128;
+    return (int8_t)val;
+}
 
-    // Read the tachometer pin for the specified fan
-    if (channel == TIM_CHANNEL_1) {
-        pulse_count = HAL_GPIO_ReadPin(FAN1_TACH_GPIO_Port, FAN1_TACH_Pin);
-    } else {
-        pulse_count = HAL_GPIO_ReadPin(FAN2_TACH_GPIO_Port, FAN2_TACH_Pin);
-    }
+uint8_t FAN_ReadFanSpeed(FAN_Driver *dev) {
+    uint8_t speed;
+    if (!fan_read(dev, MAX6663_REG_FAN_SPEED, &speed)) return 0xFF;
+    return speed;
+}
 
-    // Calculate RPM from pulse count
-    // This requires capturing pulse counts over a fixed time period
-    // Placeholder logic assumes pulse_count is pre-measured
-    rpm = (pulse_count * 60) / TACH_PULSES_PER_REV;
+uint8_t FAN_ReadStatus1(FAN_Driver *dev) {
+    uint8_t val;
+    fan_read(dev, MAX6663_REG_STATUS1, &val);
+    return val;
+}
 
-    return rpm;
+uint8_t FAN_ReadStatus2(FAN_Driver *dev) {
+    uint8_t val;
+    fan_read(dev, MAX6663_REG_STATUS2, &val);
+    return val;
+}
+
+bool FAN_ClearFaults(FAN_Driver *dev) {
+    uint8_t dummy;
+    return fan_read(dev, MAX6663_REG_STATUS1, &dummy) && fan_read(dev, MAX6663_REG_STATUS2, &dummy);
+}
+
+uint8_t FAN_ReadDeviceID(FAN_Driver *dev) {
+    uint8_t val = 0;
+    fan_read(dev, MAX6663_REG_DEVICE_ID, &val);
+    return val;
+}
+
+uint8_t FAN_ReadManufacturerID(FAN_Driver *dev) {
+    uint8_t val = 0;
+    fan_read(dev, MAX6663_REG_MAN_ID, &val);
+    return val;
 }
