@@ -84,7 +84,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 5};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 6};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -94,6 +94,7 @@ extern TCA9548A_HandleTypeDef iic_mux[2];
 extern FAN_Driver fan;
 
 volatile bool _enter_dfu = false;
+
 
 /* USER CODE END PV */
 

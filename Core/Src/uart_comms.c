@@ -17,6 +17,7 @@
 #include "tca9548a.h"
 #include "trigger.h"
 #include "fan_driver.h"
+#include "ads7828.h"
 
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];

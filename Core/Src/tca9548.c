@@ -160,6 +160,34 @@ int8_t TCA9548A_Read_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, 
     return ret;
 }
 
+int8_t TCA9548A_TransmitReceive_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, uint8_t* tx_buff, uint8_t tx_length, uint8_t* rx_buff, uint8_t rx_len)
+{
+    if (iic_mux[mux_index].hi2c == NULL) {
+        return TCA9548A_ERR_INIT;
+    }
+
+    int8_t ret = TCA9548A_SelectChannel(mux_index, channel);
+    if(ret != TCA9548A_OK) {
+    	return ret;
+    }
+
+    if (HAL_I2C_Master_Transmit(iic_mux[mux_index].hi2c, i2c_addr << 1, tx_buff, tx_length, HAL_MAX_DELAY) != HAL_OK)
+    {
+		// Handle error
+		printf("transmit i2c handle error\r\n");
+        return TCA9548A_ERR_BUS;
+    }
+
+    if (HAL_I2C_Master_Receive(iic_mux[mux_index].hi2c, i2c_addr << 1, rx_buff, rx_len, HAL_MAX_DELAY) != HAL_OK)
+    {
+		// Handle error
+		printf("receive i2c handle error\r\n");
+        return TCA9548A_ERR_BUS;
+    }
+
+    return TCA9548A_OK;
+}
+
 int8_t TCA9548A_DisableAll(uint8_t mux_index) {
     if (iic_mux[mux_index].hi2c == NULL) {
         return TCA9548A_ERR_INIT;

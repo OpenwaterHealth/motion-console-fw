@@ -61,5 +61,6 @@ int TCA9548A_scan_channel(uint8_t mux_index, uint8_t mux_channel, uint8_t* addr_
 
 int8_t TCA9548A_Write_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, uint8_t mem_addr, uint8_t data_len, uint8_t* pData);
 int8_t TCA9548A_Read_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, uint8_t mem_addr, uint8_t data_len, uint8_t* pData);
+int8_t TCA9548A_TransmitReceive_Data(uint8_t mux_index, uint8_t channel, uint8_t i2c_addr, uint8_t* tx_buff, uint8_t tx_length, uint8_t* rx_buff, uint8_t rx_len);
 
 #endif /* INC_TCA9548A_H_ */
