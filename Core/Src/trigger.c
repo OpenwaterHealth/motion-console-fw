@@ -12,10 +12,12 @@
 #include <stdbool.h>
 #include <stdlib.h>
 
+static uint32_t laser_skip_counter = 0;
 
 // setup default
 Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
-
+static uint32_t pulse_counter = 0;
+static bool pwm_enabled = true;
 
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
@@ -65,6 +67,9 @@ static int jsonToTriggerConfigData(const char *jsonString, Trigger_Config_t* new
         } else if (jsoneq(jsonString, &t[i], "EnableTaTrigger") == 0) {
             newConfig->EnableTaTrigger = (strncmp(jsonString + t[i + 1].start, "true", 4) == 0);
             i++;
+        } else if (jsoneq(jsonString, &t[i], "SkipEveryNPulses") == 0) {
+            newConfig->SkipEveryNPulses = strtoul(jsonString + t[i + 1].start, NULL, 10);
+            i++;
         }
     }
 
@@ -82,7 +87,8 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              "\"LaserPulseWidthUsec\": %lu,"
              "\"EnableSyncOut\": %s,"
              "\"EnableTaTrigger\": %s,"
-             "\"TriggerStatus\": %lu"
+             "\"TriggerStatus\": %lu,"
+             "\"SkipEveryNPulses\": %lu"
              "}",
              trigger_config.frequencyHz,
              trigger_config.triggerPulseWidthUsec,
@@ -90,7 +96,8 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              trigger_config.laserPulseWidthUsec,
              trigger_config.EnableSyncOut ? "true" : "false",
              trigger_config.EnableTaTrigger ? "true" : "false",
-			 trigger_config.TriggerStatus);
+			 trigger_config.TriggerStatus,
+			 trigger_config.SkipEveryNPulses);
 }
 
 static void updateTimerDataFromPeripheral()
@@ -165,9 +172,13 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
 
 
 HAL_StatusTypeDef Trigger_Start() {
+    laser_skip_counter = 0;
 
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, trigger_config.EnableSyncOut? GPIO_PIN_RESET:GPIO_PIN_SET); // fsync out
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, trigger_config.EnableTaTrigger? GPIO_PIN_RESET:GPIO_PIN_SET); // TA Trigger enable
+
+    __HAL_TIM_CLEAR_IT(&FSYNC_TIMER, TIM_IT_UPDATE);
+    __HAL_TIM_ENABLE_IT(&FSYNC_TIMER, TIM_IT_UPDATE);
 
     if (HAL_TIM_PWM_Start(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
         return HAL_ERROR; // Handle error
@@ -215,4 +226,32 @@ HAL_StatusTypeDef Trigger_GetConfigToJSON(char *jsonString, size_t max_length)
 	updateTimerDataFromPeripheral();
 	trigger_GetConfigJSON(jsonString, 0xFF);
     return HAL_OK;
+}
+
+void FSYNC_TIMER_IRQHandler(void)
+{
+	printf("-\r\n");
+//    if (__HAL_TIM_GET_FLAG(&FSYNC_TIMER, TIM_FLAG_UPDATE) != RESET) {
+//        if (__HAL_TIM_GET_IT_SOURCE(&FSYNC_TIMER, TIM_IT_UPDATE) != RESET) {
+            __HAL_TIM_CLEAR_IT(&FSYNC_TIMER, TIM_IT_UPDATE);
+
+            // Increment counter
+            laser_skip_counter++;
+
+            // Check whether to skip or allow LASER_TIMER to be triggered
+            if (trigger_config.SkipEveryNPulses > 0 &&
+                (laser_skip_counter % trigger_config.SkipEveryNPulses) == 0)
+            {
+                // Skip: disable slave mode to suppress trigger
+                LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
+                printf(".\r\n");
+            }
+            else
+            {
+                // Enable slave mode (e.g., trigger mode or reset mode depending on your setup)
+                LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
+                LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER; // or _RESET, depending on your config
+            }
+//        }
+//    }
 }
