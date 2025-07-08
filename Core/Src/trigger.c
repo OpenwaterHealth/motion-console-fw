@@ -17,7 +17,6 @@ static uint32_t laser_skip_counter = 0;
 // setup default
 Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
 static uint32_t pulse_counter = 0;
-static bool pwm_enabled = true;
 
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
@@ -228,9 +227,15 @@ HAL_StatusTypeDef Trigger_GetConfigToJSON(char *jsonString, size_t max_length)
     return HAL_OK;
 }
 
+uint32_t get_pulseCount(void)
+{
+	return pulse_counter;
+}
+
 void FSYNC_TIMER_IRQHandler(void)
 {
 	printf("-\r\n");
+	pulse_counter++;
 //    if (__HAL_TIM_GET_FLAG(&FSYNC_TIMER, TIM_FLAG_UPDATE) != RESET) {
 //        if (__HAL_TIM_GET_IT_SOURCE(&FSYNC_TIMER, TIM_IT_UPDATE) != RESET) {
             __HAL_TIM_CLEAR_IT(&FSYNC_TIMER, TIM_IT_UPDATE);
