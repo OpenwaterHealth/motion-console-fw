@@ -237,19 +237,40 @@ uint32_t get_fsync_pulse_count(void)
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
     fsync_counter++;
+
+    if ((fsync_counter % 600) == 0) {
+        // Disable LASER_TIMER triggering this cycle
+        __HAL_TIM_DISABLE(&LASER_TIMER);
+        __HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
+        __HAL_TIM_MOE_DISABLE(&LASER_TIMER);
+        __HAL_TIM_DISABLE_DMA(&LASER_TIMER, TIM_DMA_UPDATE);
+
+        // Remove trigger by disabling slave mode
+        LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
+    } else {
+        // Re-enable one pulse slave trigger
+        __HAL_TIM_DISABLE(&LASER_TIMER);
+        __HAL_TIM_MOE_ENABLE(&LASER_TIMER);
+        LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS; // Clear first
+        LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER;
+    }
+
 #if 0
     if (fsync_counter % 200 == 0) {
     	printf("FSYNC tick: %lu\r\n", fsync_counter);
     }
 #endif
+
 }
 
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
     lsync_counter++;
+
 #if 0
     if (lsync_counter % 200 == 0) {
     	printf("LSYNC tick: %lu\r\n", lsync_counter);
     }
 #endif
+
 }
