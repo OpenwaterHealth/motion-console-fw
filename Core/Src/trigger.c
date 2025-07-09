@@ -180,7 +180,7 @@ HAL_StatusTypeDef Trigger_Start() {
 	lsync_counter = 0;
 	fsync_counter = 0;
 
-	__HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);
+	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
 	if(HAL_TIM_OC_Start_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
         return HAL_ERROR; // Handle error
 	}
