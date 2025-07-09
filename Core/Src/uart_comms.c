@@ -39,7 +39,8 @@ static uint8_t last_fan_speed = 0;
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
-
+static uint32_t last_fsync_count = 0;
+static uint32_t last_lsync_count = 0;
 
 volatile uint8_t rgb_state = 0; // 0 = off, 1 == IND1, 2 == IND2, 3 == IND3
 
@@ -435,6 +436,22 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
 			Trigger_Stop();
+			break;
+		case OW_CTRL_GET_FSYNC:
+			uartResp->command = OW_CTRL_GET_FSYNC;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 4;
+			last_fsync_count = get_fsync_pulse_count();
+			uartResp->data = (uint8_t *)&last_fsync_count;
+			break;
+		case OW_CTRL_GET_LSYNC:
+			uartResp->command = OW_CTRL_GET_LSYNC;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 4;
+			last_lsync_count = get_lsync_pulse_count();
+			uartResp->data = (uint8_t *)&last_lsync_count;
 			break;
 		default:
 			uartResp->data_len = 0;
