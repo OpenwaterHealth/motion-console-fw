@@ -1143,6 +1143,18 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 		logging_UART_TxCpltCallback(huart);
 	}
 }
+
+void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
+{
+	  if (htim->Instance == TIM2) {
+		  FSYNC_DelayElapsedCallback(htim);
+	  }
+
+	  if (htim->Instance == TIM3) {
+	  	  LSYNC_DelayElapsedCallback(htim);
+	  }
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -1206,7 +1218,6 @@ void MPU_Config(void)
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
-
   if (htim->Instance == TIM4) {
 
   }

@@ -16,6 +16,8 @@
 // setup default
 Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
 
+volatile uint32_t fsync_counter = 0;
+volatile uint32_t lsync_counter = 0;
 
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
@@ -126,7 +128,8 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
 	if(trigger_config.TriggerStatus == HAL_TIM_CHANNEL_STATE_BUSY)
 	{
 		// stop timer pwm
-		HAL_TIM_PWM_Stop(&FSYNC_TIMER , FSYNC_TIMER_CHAN);
+		HAL_TIM_OC_Stop_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
+
 		trigger_config.TriggerStatus = HAL_TIM_CHANNEL_STATE_READY;
 
 		HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
@@ -169,17 +172,21 @@ HAL_StatusTypeDef Trigger_Start() {
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, trigger_config.EnableSyncOut? GPIO_PIN_RESET:GPIO_PIN_SET); // fsync out
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, trigger_config.EnableTaTrigger? GPIO_PIN_RESET:GPIO_PIN_SET); // TA Trigger enable
 
-    if (HAL_TIM_PWM_Start(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
+	lsync_counter = 0;
+	fsync_counter = 0;
+
+	__HAL_TIM_ENABLE_IT(&htim3, TIM_IT_CC1);
+	if(HAL_TIM_OC_Start_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
         return HAL_ERROR; // Handle error
-    }
+	}
 
     return HAL_OK;
 }
 
 HAL_StatusTypeDef Trigger_Stop() {
-    if (HAL_TIM_PWM_Stop(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
+	if (HAL_TIM_OC_Stop_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
         return HAL_ERROR; // Handle error
-    }
+	}
 
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
@@ -215,4 +222,34 @@ HAL_StatusTypeDef Trigger_GetConfigToJSON(char *jsonString, size_t max_length)
 	updateTimerDataFromPeripheral();
 	trigger_GetConfigJSON(jsonString, 0xFF);
     return HAL_OK;
+}
+
+uint32_t get_lsync_pulse_count(void)
+{
+	return lsync_counter;
+}
+
+uint32_t get_fsync_pulse_count(void)
+{
+	return fsync_counter;
+}
+
+void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    fsync_counter++;
+#if 0
+    if (fsync_counter % 200 == 0) {
+    	printf("FSYNC tick: %lu\r\n", fsync_counter);
+    }
+#endif
+}
+
+void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    lsync_counter++;
+#if 0
+    if (lsync_counter % 200 == 0) {
+    	printf("LSYNC tick: %lu\r\n", lsync_counter);
+    }
+#endif
 }
