@@ -58,6 +58,9 @@ static int jsonToTriggerConfigData(const char *jsonString, Trigger_Config_t* new
         } else if (jsoneq(jsonString, &t[i], "LaserPulseWidthUsec") == 0) {
             newConfig->laserPulseWidthUsec = strtoul(jsonString + t[i + 1].start, NULL, 10);
             i++;
+        } else if (jsoneq(jsonString, &t[i], "LaserPulseSkipInterval") == 0) {
+            newConfig->LaserPulseSkipInterval = strtoul(jsonString + t[i + 1].start, NULL, 10);
+            i++;
         } else if (jsoneq(jsonString, &t[i], "TriggerStatus") == 0) {
             newConfig->TriggerStatus = strtoul(jsonString + t[i + 1].start, NULL, 10);
             i++;
@@ -82,6 +85,7 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              "\"TriggerPulseWidthUsec\": %lu,"
              "\"LaserPulseDelayUsec\": %lu,"
              "\"LaserPulseWidthUsec\": %lu,"
+             "\"LaserPulseSkipInterval\": %lu,"
              "\"EnableSyncOut\": %s,"
              "\"EnableTaTrigger\": %s,"
              "\"TriggerStatus\": %lu"
@@ -90,6 +94,7 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              trigger_config.triggerPulseWidthUsec,
              trigger_config.laserPulseDelayUsec,
              trigger_config.laserPulseWidthUsec,
+             trigger_config.LaserPulseSkipInterval,
              trigger_config.EnableSyncOut ? "true" : "false",
              trigger_config.EnableTaTrigger ? "true" : "false",
 			 trigger_config.TriggerStatus);
@@ -238,21 +243,24 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
     fsync_counter++;
 
-    if ((fsync_counter % 600) == 0) {
-        // Disable LASER_TIMER triggering this cycle
-        __HAL_TIM_DISABLE(&LASER_TIMER);
-        __HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
-        __HAL_TIM_MOE_DISABLE(&LASER_TIMER);
-        __HAL_TIM_DISABLE_DMA(&LASER_TIMER, TIM_DMA_UPDATE);
+    if (trigger_config.LaserPulseSkipInterval > 0) {
 
-        // Remove trigger by disabling slave mode
-        LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
-    } else {
-        // Re-enable one pulse slave trigger
-        __HAL_TIM_DISABLE(&LASER_TIMER);
-        __HAL_TIM_MOE_ENABLE(&LASER_TIMER);
-        LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS; // Clear first
-        LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER;
+		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0) {
+			// Disable LASER_TIMER triggering this cycle
+			__HAL_TIM_DISABLE(&LASER_TIMER);
+			__HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
+			__HAL_TIM_MOE_DISABLE(&LASER_TIMER);
+			__HAL_TIM_DISABLE_DMA(&LASER_TIMER, TIM_DMA_UPDATE);
+
+			// Remove trigger by disabling slave mode
+			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
+		} else {
+			// Re-enable one pulse slave trigger
+			__HAL_TIM_DISABLE(&LASER_TIMER);
+			__HAL_TIM_MOE_ENABLE(&LASER_TIMER);
+			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS; // Clear first
+			LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER;
+		}
     }
 
 #if 0

@@ -20,6 +20,7 @@ typedef struct {
     uint32_t triggerPulseWidthUsec;     // Pulse width in microseconds max determined by freq
     uint32_t laserPulseDelayUsec;     // Pulse width in microseconds max based on selected freq
     uint32_t laserPulseWidthUsec;     // Pulse width in microseconds max based on selected freq
+    uint32_t LaserPulseSkipInterval;     // skip laser every nTH pulse
     bool EnableSyncOut;
     bool EnableTaTrigger;
     uint32_t TriggerStatus;

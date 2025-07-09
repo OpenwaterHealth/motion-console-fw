@@ -275,6 +275,7 @@ int main(void)
   triggerSetup.laserPulseWidthUsec = 1000;
   triggerSetup.EnableSyncOut = false;
   triggerSetup.EnableTaTrigger = true;
+  triggerSetup.LaserPulseSkipInterval = 0;
   Trigger_SetConfig(&triggerSetup);
 
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
