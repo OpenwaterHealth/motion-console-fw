@@ -8,6 +8,9 @@
 
 #include <stdio.h>
 
+
+static uint8_t rgb_state = 0;
+
 // Initialize the LEDs
 void LED_Init(void)
 {
@@ -16,6 +19,34 @@ void LED_Init(void)
     HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+}
+
+void LED_RGB_SET(uint8_t rgbState)
+{
+	rgb_state = rgbState;
+	HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+	switch(rgb_state)
+	{
+		case 1:
+			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
+			break;
+		case 2:
+			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
+			break;
+		case 3:
+			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_SET);
+			break;
+		case 0:
+		default:
+			break;
+	}
+}
+
+uint8_t LED_RGB_GET(void)
+{
+	return rgb_state;
 }
 
 // Set the state of an LED (ON/OFF)

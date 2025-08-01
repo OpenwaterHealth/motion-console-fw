@@ -18,6 +18,7 @@
 #include "trigger.h"
 #include "fan_driver.h"
 #include "ads7828.h"
+#include "led_driver.h"
 
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
@@ -41,8 +42,6 @@ static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
-
-volatile uint8_t rgb_state = 0; // 0 = off, 1 == IND1, 2 == IND2, 3 == IND3
 
 static char retTriggerJson[0xFF];
 
@@ -284,31 +283,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			}
 			else
 			{
-				rgb_state = cmd->reserved;
-				HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
-				HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
-				HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
-				switch(rgb_state)
-				{
-					case 1:
-						HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
-						break;
-					case 2:
-						HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
-						break;
-					case 3:
-						HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_SET);
-						break;
-					case 0:
-					default:
-						break;
-				}
+				LED_RGB_SET(cmd->reserved);
 			}
 			break;
 		case OW_CTRL_GET_IND:
 			//printf("Console GET Indicator\r\n");
 			uartResp->command = OW_CTRL_GET_IND;
-			uartResp->reserved = rgb_state;
+			uartResp->reserved = LED_RGB_GET();
 			break;
 		case OW_CTRL_SET_FAN:
 			//printf("Console Set Fan ADDR: 0x%02X SPEED: 0x%02X\r\n", cmd->addr, cmd->data[0]);
@@ -428,20 +409,18 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
+
+			LED_RGB_SET(1); // Blue
 			Trigger_Start();
-			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
 			break;
 		case OW_CTRL_STOP_TRIG:
 			uartResp->command = OW_CTRL_STOP_TRIG;
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
+
+			LED_RGB_SET(2); // Green
 			Trigger_Stop();
-			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
-			HAL_GPIO_WritePin(IND1_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
 			break;
 		case OW_CTRL_GET_FSYNC:
 			uartResp->command = OW_CTRL_GET_FSYNC;
