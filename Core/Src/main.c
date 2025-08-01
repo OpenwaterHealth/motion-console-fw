@@ -281,6 +281,9 @@ int main(void)
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
 
   LED_Init();
+  HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
 
 #ifdef SCAN_DISPLAY
   printf("I2C1\r\n");
@@ -365,6 +368,12 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   comms_init();
+
+
+  HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
+
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

@@ -429,6 +429,9 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
 			Trigger_Start();
+			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
 			break;
 		case OW_CTRL_STOP_TRIG:
 			uartResp->command = OW_CTRL_STOP_TRIG;
@@ -436,6 +439,9 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
 			Trigger_Stop();
+			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND1_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
 			break;
 		case OW_CTRL_GET_FSYNC:
 			uartResp->command = OW_CTRL_GET_FSYNC;
