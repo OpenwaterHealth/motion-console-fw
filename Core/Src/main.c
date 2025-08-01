@@ -84,7 +84,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 2, 6};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 3, 0};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -280,7 +280,7 @@ int main(void)
 
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
 
-  LED_Init();
+  LED_RGB_SET(3); // Red
 
 #ifdef SCAN_DISPLAY
   printf("I2C1\r\n");
@@ -365,6 +365,10 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   comms_init();
+
+
+  LED_RGB_SET(2); // Green
+
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */

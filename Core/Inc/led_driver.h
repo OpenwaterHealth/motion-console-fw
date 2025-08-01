@@ -20,5 +20,7 @@ typedef enum {
 void LED_Init(void);
 void LED_SetState(GPIO_TypeDef *GPIO_Port, uint16_t GPIO_Pin, LED_State state);
 void LED_Toggle(GPIO_TypeDef *GPIO_Port, uint16_t GPIO_Pin);
+void LED_RGB_SET(uint8_t state);
+uint8_t LED_RGB_GET(void);
 
 #endif /* INC_LED_DRIVER_H_ */
