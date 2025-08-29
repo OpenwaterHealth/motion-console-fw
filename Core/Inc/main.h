@@ -97,20 +97,24 @@ void Error_Handler(void);
 #define SYNC_IN_GPIO_Port GPIOC
 #define SYNC_OUT_Pin GPIO_PIN_5
 #define SYNC_OUT_GPIO_Port GPIOC
+#define BRD_V2_Pin GPIO_PIN_7
+#define BRD_V2_GPIO_Port GPIOE
 #define POWER_DETECT_Pin GPIO_PIN_15
 #define POWER_DETECT_GPIO_Port GPIOE
 #define FULL_ON_n_Pin GPIO_PIN_10
 #define FULL_ON_n_GPIO_Port GPIOD
 #define IO_EXP_RSTN_Pin GPIO_PIN_2
 #define IO_EXP_RSTN_GPIO_Port GPIOA
+#define BRD_V1_Pin GPIO_PIN_8
+#define BRD_V1_GPIO_Port GPIOE
 #define SP_GPIO1_Pin GPIO_PIN_9
 #define SP_GPIO1_GPIO_Port GPIOD
 #define IND1_Pin GPIO_PIN_3
 #define IND1_GPIO_Port GPIOA
 #define enSyncOUT_Pin GPIO_PIN_7
 #define enSyncOUT_GPIO_Port GPIOA
-#define FAN1_TACH_Pin GPIO_PIN_9
-#define FAN1_TACH_GPIO_Port GPIOE
+#define BRD_V0_Pin GPIO_PIN_9
+#define BRD_V0_GPIO_Port GPIOE
 #define enSyncIN_Pin GPIO_PIN_8
 #define enSyncIN_GPIO_Port GPIOD
 
