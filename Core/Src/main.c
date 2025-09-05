@@ -261,17 +261,14 @@ int main(void)
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_SET);
 
   // setup PDU monitor
-  adc_mon[0].address = 0x48;
-  adc_mon[0].index = 0x01;
-  adc_mon[0].channel = 0x00;
-  adc_mon[0].hi2c = &hi2c2;
-  adc_mon[0].vref = 2.50;
-
-  adc_mon[1].address = 0x4B;
-  adc_mon[1].index = 0x01;
-  adc_mon[1].channel = 0x00;
-  adc_mon[1].hi2c = &hi2c2;
-  adc_mon[1].vref = 2.50;
+  if((ADS7828_Init(&adc_mon[0], &hi2c2, 0x00) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[0], ADS7828_PD_ON_REF_ON) != HAL_OK))
+  {
+	  printf("Failed to initialize ADC0\r\n");
+  }
+  if((ADS7828_Init(&adc_mon[1], &hi2c2, 0x03) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[1], ADS7828_PD_ON_REF_ON) != HAL_OK))
+  {
+	  printf("Failed to initialize ADC0\r\n");
+  }
 
   printf("\033c");
   HAL_Delay(250);
@@ -364,13 +361,20 @@ int main(void)
   HAL_Delay(250);
 
   HAL_Delay(1000);
-  uint16_t raw_val = ADS7828_ReadChannel(&adc_mon[0], 0);
-  float voltage = ADS7828_ConvertToVoltage(&adc_mon[0], raw_val);
-  printf("CH0 Raw %d Voltage %d mV\r\n", raw_val, (int)(voltage * 1000.0f));
+  uint16_t adc_result;
+  if (ADS7828_ReadChannel(&adc_mon[0], 0, &adc_result) == HAL_OK) {
+      float voltage = ADS7828_ConvertToVoltage(adc_result, 2.5f);
+      printf("Channel 0: %d (%.3f V)\r\n", adc_result, voltage);
+  } else {
+      printf("Error reading channel 0\r\n");
+  }
 
-  raw_val = ADS7828_ReadChannel(&adc_mon[1], 6);
-  voltage = ADS7828_ConvertToVoltage(&adc_mon[1], raw_val);
-  printf("CH6 Raw %d Voltage %d mV\r\n", raw_val, (int)(voltage * 1000.0f));
+  if (ADS7828_ReadChannel(&adc_mon[1], 6, &adc_result) == HAL_OK) {
+      float voltage = ADS7828_ConvertToVoltage(adc_result, 2.5f);
+      printf("Channel 6: %d (%.3f V)\r\n", adc_result, voltage);
+  } else {
+      printf("Error reading channel 0\r\n");
+  }
 
   /* USER CODE END 2 */
 

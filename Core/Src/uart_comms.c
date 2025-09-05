@@ -11,7 +11,6 @@
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
-#include <string.h>
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
 #include "tca9548a.h"
@@ -19,6 +18,8 @@
 #include "fan_driver.h"
 #include "ads7828.h"
 #include "led_driver.h"
+
+#include <string.h>
 
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
