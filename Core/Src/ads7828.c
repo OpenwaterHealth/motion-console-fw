@@ -6,13 +6,19 @@
  */
 
 #include "ads7828.h"
-
+#include "tca9548a.h"
+#include "utils.h"
 #include <stdio.h>
 #include <stdint.h>
+
+ADS7828_HandleTypeDef adc_mon[2];
 
 uint16_t ADS7828_ReadChannel(ADS7828_HandleTypeDef *ads, uint8_t channel)
 {
     if (channel > 7) return 0xFFFF;
+
+    TCA9548A_SelectChannel(ads->index, ads->channel);
+    delay_us(1);
 
     uint8_t cmd = ADS7828_CMD_SD_SINGLE | ((channel & 0x07) << 4) | ADS7828_CMD_PD_DEFAULT;
     uint8_t rx[2];

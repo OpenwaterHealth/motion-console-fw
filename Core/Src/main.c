@@ -30,6 +30,7 @@
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
+#include "ads7828.h"
 #include "fan_driver.h"
 #include "utils.h"
 
@@ -93,6 +94,7 @@ uint8_t txBuffer[COMMAND_MAX_SIZE];
 
 // Declare handles for your two multiplexers
 extern TCA9548A_HandleTypeDef iic_mux[2];
+extern ADS7828_HandleTypeDef adc_mon[2];
 extern FAN_Driver fan;
 
 volatile bool _enter_dfu = false;
@@ -180,7 +182,6 @@ void configure_pin_as_gpio_output(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin) {
 
 void delay_ms(uint32_t ms)
 {
-	printf("Clock: %ld\r\n", SystemCoreClock);
     uint32_t delay_cycles = (SystemCoreClock / 1000) * ms;
     while (delay_cycles--) {
         __NOP();  // Ensures the loop doesn't get optimized away
@@ -247,6 +248,8 @@ int main(void)
 
   init_dma_logging();
 
+  DWT_Init();
+
   // HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
   // HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
   HAL_GPIO_WritePin(SCL_CFG_GPIO_Port, SCL_CFG_Pin, GPIO_PIN_RESET);
@@ -256,6 +259,19 @@ int main(void)
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_SET);
+
+  // setup PDU monitor
+  adc_mon[0].address = 0x48;
+  adc_mon[0].index = 0x01;
+  adc_mon[0].channel = 0x00;
+  adc_mon[0].hi2c = &hi2c2;
+  adc_mon[0].vref = 2.50;
+
+  adc_mon[1].address = 0x4B;
+  adc_mon[1].index = 0x01;
+  adc_mon[1].channel = 0x00;
+  adc_mon[1].hi2c = &hi2c2;
+  adc_mon[1].vref = 2.50;
 
   printf("\033c");
   HAL_Delay(250);
@@ -337,10 +353,24 @@ int main(void)
 	  FAN_SetManualPWM(&fan, 10);
   }
 
+  // select GPIO expander channel
+  TCA9548A_SelectChannel(1, 0);
+  PCA9535APW_Init(&hi2c2);
+  PCA9535APW_WritePin(0, 7, 1); // shut led off
+
 
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
+
+  HAL_Delay(1000);
+  uint16_t raw_val = ADS7828_ReadChannel(&adc_mon[0], 0);
+  float voltage = ADS7828_ConvertToVoltage(&adc_mon[0], raw_val);
+  printf("CH0 Raw %d Voltage %d mV\r\n", raw_val, (int)(voltage * 1000.0f));
+
+  raw_val = ADS7828_ReadChannel(&adc_mon[1], 6);
+  voltage = ADS7828_ConvertToVoltage(&adc_mon[1], raw_val);
+  printf("CH6 Raw %d Voltage %d mV\r\n", raw_val, (int)(voltage * 1000.0f));
 
   /* USER CODE END 2 */
 

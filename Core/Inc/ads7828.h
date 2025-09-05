@@ -14,9 +14,11 @@
 #define ADS7828_CMD_PD_DEFAULT   (0x0C)  // Internal ref ON, ADC ON
 
 typedef struct {
-    I2C_HandleTypeDef *hi2c;  // Pointer to I2C peripheral
-    uint8_t address;          // 7-bit address (e.g., 0x48 or 0x4B)
-    float vref;               // Reference voltage (e.g., 3.3)
+    I2C_HandleTypeDef *hi2c;  	// Pointer to I2C peripheral
+    uint8_t index;		  		// index to select i2c switch
+    uint8_t channel;		  	// channel for i2c switch
+    uint8_t address;          	// 7-bit address (e.g., 0x48 or 0x4B)
+    float vref;               	// Reference voltage (e.g., 3.3)
 } ADS7828_HandleTypeDef;
 
 uint16_t ADS7828_ReadChannel(ADS7828_HandleTypeDef *ads, uint8_t channel);
