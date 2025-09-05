@@ -94,7 +94,6 @@ HAL_StatusTypeDef ADS7828_ReadChannel(ADS7828_HandleTypeDef *hadc, uint8_t chann
     uint8_t be_chan = reverse_first_3_bits(channel);
     // Build command byte: SD=1 (single-ended), PD mode, channel selection
     command = ADS7828_SD_BIT | (be_chan << 4) | ( hadc->power_mode << 2);
-    printf("COMMAND 0x%02X\r\n", command);
     // Send command and read conversion result
     status = HAL_I2C_Master_Transmit(hadc->hi2c, hadc->i2c_address << 1, &command, 1, HAL_MAX_DELAY);
     if (status != HAL_OK) {
