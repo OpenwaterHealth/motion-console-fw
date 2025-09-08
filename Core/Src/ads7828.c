@@ -107,7 +107,7 @@ HAL_StatusTypeDef ADS7828_ReadChannel(ADS7828_HandleTypeDef *hadc, uint8_t chann
     }
 
     // Combine bytes to form 12-bit result
-    *result = ((rx_data[0] << 8) | rx_data[1]) >> 4;
+    *result = (rx_data[0] << 8) | rx_data[1];
 
     return HAL_OK;
 }
@@ -141,7 +141,7 @@ HAL_StatusTypeDef ADS7828_ReadDifferential(ADS7828_HandleTypeDef *hadc, uint8_t 
         return status;
     }
 
-    *result = ((rx_data[0] << 8) | rx_data[1]) >> 4;
+    *result = (rx_data[0] << 8) | rx_data[1];
 
     return HAL_OK;
 }
