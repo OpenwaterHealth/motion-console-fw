@@ -49,7 +49,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define SCAN_DISPLAY
+// #define SCAN_DISPLAY
 
 /* USER CODE END PD */
 
@@ -127,7 +127,7 @@ void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
-// #ifdef SCAN_DISPLAY
+#ifdef SCAN_DISPLAY
 static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t list_size, bool display) {
 
 	uint8_t found = 0;
