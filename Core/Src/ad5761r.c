@@ -14,6 +14,78 @@ static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef* port, uint16_t pin) {
     return 0;
 }
 
+
+// Convert volts to 16-bit code for chosen span; clamps to range
+uint16_t volts_to_code(const ad5761r_dev *dev, float v)
+{
+  // Compute nominal span and limits
+  float vmin=0.f, vmax=5.f; // default
+  switch (dev->ra) {
+    case AD5761R_RANGE_M_10V_TO_P_10V: vmin=-10.f; vmax=+10.f; break;
+    case AD5761R_RANGE_0_V_TO_P_10V: vmin=0.f;   vmax=+10.f; break;
+    case AD5761R_RANGE_M_5V_TO_P_5V:  vmin=-5.f;  vmax=+5.f;  break;
+    case AD5761R_RANGE_0V_TO_P_5V:  vmin=0.f;   vmax=+5.f;  break;
+    case AD5761R_RANGE_M_2V5_TO_P_7V5: vmin=-2.5f; vmax=+7.5f; break;
+    case AD5761R_RANGE_M_3V_TO_P_3V:  vmin=-3.f;  vmax=+3.f;  break;
+    case AD5761R_RANGE_0V_TO_P_16V: vmin=0.f;   vmax=+16.f; break;
+    case AD5761R_RANGE_0V_TO_P_20V: vmin=0.f;   vmax=+20.f; break;
+  }
+
+  // Optional 5% overrange
+  if (dev->ovr_en) {
+    float span = (vmax - vmin);
+    vmin -= 0.05f * span * 0.5f;   // extend both ends equally
+    vmax += 0.05f * span * 0.5f;
+  }
+
+  if (v < vmin) v = vmin;
+  if (v > vmax) v = vmax;
+
+  // Coding:
+  // Unipolar (0..Vmax): straight binary 0..65535
+  // Bipolar: use two’s complement if B2C=1 (recommended)
+  if (vmin >= 0.f) {
+    float code = (v - vmin) * (65535.0f / (vmax - vmin));
+    if (code < 0.f)
+    {
+    	code = 0.f;
+    	if (code > 65535.f)
+    	{
+    		code = 65535.f;
+    	}
+    }
+    return (uint16_t)(code + 0.5f);
+  } else {
+    float span = vmax - vmin; // e.g., 20 V for ±10V
+    if (dev->b2c_range_en) {
+      // map v in [vmin,vmax] -> int16_t range −32768..+32767
+      float sc = v * (32767.0f / (span / 2.0f)); // ±full-scale -> ±32767
+      int32_t s = (int32_t)(sc + (sc >= 0 ? 0.5f : -0.5f));
+      if (s < -32768)
+      {
+    	  s = -32768;
+    	  if (s > 32767)
+    	  {
+    		  s = 32767;
+    	  }
+      }
+      return (uint16_t)((uint16_t)s); // reinterpret as 16-bit
+    } else {
+      // Bipolar straight binary: offset binary
+      float code = ( (v - vmin) * (65535.0f / span) );
+      if (code < 0.f)
+      {
+    	  code = 0.f;
+    	  if (code > 65535.f)
+    	  {
+    		  code = 65535.f;
+          }
+      }
+      return (uint16_t)(code + 0.5f);
+    }
+  }
+}
+
 /**
  * SPI write to device.
  * @param dev - The device structure.
@@ -627,10 +699,9 @@ HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
 
     if (!dev || !dev->hspi) return HAL_ERROR;
 
-    //ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
+    ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
 	HAL_Delay(1);
-	ret = ad5761r_config(dev);
-
+	ret |= ad5761r_config(dev);
 
 	return ret;
 

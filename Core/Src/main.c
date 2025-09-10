@@ -301,22 +301,16 @@ int main(void)
 	  .daisy_chain_en=false
   };
 
-  if(ad5761r_write(&tec_dac, CMD_SW_DATA_RESET, 0x0000) != HAL_OK){
+  if(ad5761r_init(&tec_dac) != HAL_OK){
 	  printf("Failed to initialize TEC DAC\r\n");
   } else {
-		uint16_t reg_data;
-		if(ad5761r_write(&tec_dac, CMD_WR_CTRL_REG, 0x0433) != HAL_OK){
-		  printf("Failed to write control register of TEC DAC\r\n");
-		}
-
-		ad5761r_read(&tec_dac, CMD_RD_CTRL_REG, &reg_data);
-		printf("Read Control REG 0x%04X\r\n", reg_data);
-
-		// 1. Write the desired value to the input register
-		ad5761r_write(&tec_dac, CMD_WR_UPDATE_DAC_REG, 0x7FFF);
-
-		ad5761r_read(&tec_dac, CMD_RD_DAC_REG, &reg_data);
-		printf("Read DAC Data 0x%04X\r\n", reg_data); // This should now also be 0xFFFF
+	uint16_t reg_data = 0;
+    reg_data = volts_to_code(&tec_dac, 0.5f);
+    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)){
+		  printf("TEC DAC Failed to set DAC Voltage\r\n");
+		}else{
+		  printf("TEC DAC Initialized and set DAC Voltage\r\n");
+    }
   }
 
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
