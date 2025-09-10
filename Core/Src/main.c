@@ -49,7 +49,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-// #define SCAN_DISPLAY
+#define SCAN_DISPLAY
 
 /* USER CODE END PD */
 
@@ -127,7 +127,7 @@ void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 
-#ifdef SCAN_DISPLAY
+// #ifdef SCAN_DISPLAY
 static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t list_size, bool display) {
 
 	uint8_t found = 0;
@@ -336,18 +336,6 @@ int main(void)
 
   LED_RGB_SET(3); // Red
 
-#ifdef SCAN_DISPLAY
-  printf("I2C1\r\n");
-  I2C_scan(&hi2c1, NULL, 0, true);
-
-  printf("I2C2\r\n");
-  I2C_scan(&hi2c2, NULL, 0, true);
-
-  printf("I2C4\r\n");
-  I2C_scan(&hi2c4, NULL, 0, true);
-
-#endif
-
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
   {
@@ -357,19 +345,23 @@ int main(void)
 	  } else {
 		  printf("Initialized MUX%d\r\n", i+1);
 	      iic_mux[i].initialized = true;
-#ifdef SCAN_DISPLAY
-	      for(int x=0; x<8; x++){
-			if (TCA9548A_SelectChannel(i, x) != TCA9548A_OK) {
-				printf("error selecting channel %d\r\n", x);
-			} else {
-				printf("Scan MUX%d channel %d\r\n",i+1, x);
-				I2C_scan(iic_mux[i].hi2c, NULL, 0, true);
-			}
-		  }
-#endif
 	  }
 
   }
+
+#ifdef SCAN_DISPLAY
+  // printf("I2C1\r\n");
+  // I2C_scan(&hi2c1, NULL, 0, true);
+
+
+  TCA9548A_SelectChannel(1, 2); // scan eeprom and TEC ADC
+  printf("I2C2\r\n");
+  I2C_scan(&hi2c2, NULL, 0, true);
+
+  // printf("I2C4\r\n");
+  // I2C_scan(&hi2c4, NULL, 0, true);
+
+#endif
 
   FAN_Init(&fan, &hi2c4, 0x2C);
 
