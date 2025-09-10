@@ -1,280 +1,637 @@
-/*
- * ad5761r.c
- *
- *  Created on: Sep 5, 2025
- *      Author: gvigelet
- */
 #include "ad5761r.h"
-#include <string.h>
 
-/* ---- Range parameters (m, c) identical to the Linux driver ---------------- */
-typedef struct { int32_t m; int32_t c; } range_param_t;
-static const range_param_t s_range[8] = {
-/* AD5761_VOLTAGE_RANGE_M10V_10V */ { 80, 40 },
-/* AD5761_VOLTAGE_RANGE_0V_10V   */ { 40,  0 },
-/* AD5761_VOLTAGE_RANGE_M5V_5V   */ { 40, 20 },
-/* AD5761_VOLTAGE_RANGE_0V_5V    */ { 20,  0 },
-/* AD5761_VOLTAGE_RANGE_M2V5_7V5 */ { 40, 10 },
-/* AD5761_VOLTAGE_RANGE_M3V_3V   */ { 24, 12 },
-/* AD5761_VOLTAGE_RANGE_0V_16V   */ { 64,  0 },
-/* AD5761_VOLTAGE_RANGE_0V_20V   */ { 80,  0 },
-};
+#include <stdio.h>
 
-/* ---- Small helpers -------------------------------------------------------- */
-static inline void drv_gpio_write(AD5761R_Gpio g, GPIO_PinState st) {
-    if (g.Port) HAL_GPIO_WritePin(g.Port, g.Pin, st);
+// ---- Internal helpers ----
+static inline void cs_low(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_RESET); }
+static inline void cs_high(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_SET); }
+
+static inline void drv_gpio_write(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState st) {
+    if (port) HAL_GPIO_WritePin(port, pin, st);
 }
-static inline void cs_assert(const AD5761R_Handle *dev)  { drv_gpio_write(dev->CSn,  GPIO_PIN_RESET); }
-static inline void cs_deassert(const AD5761R_Handle *dev){ drv_gpio_write(dev->CSn,  GPIO_PIN_SET);   }
-
-static inline uint8_t msb(uint32_t v, int byte_index) {
-    return (uint8_t)((v >> (8 * (2 - byte_index))) & 0xFF); /* 24-bit big-endian stream */
+static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef* port, uint16_t pin) {
+    if (port) return HAL_GPIO_ReadPin(port, pin);
+    return 0;
 }
 
-/* Transmit a single 24-bit frame (3 bytes, MSB first). If CS GPIO provided,
-   we control it; else rely on HAL NSS settings. */
-static HAL_StatusTypeDef tx24(AD5761R_Handle *dev, uint32_t frame)
+/**
+ * SPI write to device.
+ * @param dev - The device structure.
+ * @param reg_addr_cmd - The input shift register command.
+ *			 Accepted values: CMD_NOP
+ *					  CMD_WR_TO_INPUT_REG
+ *					  CMD_UPDATE_DAC_REG_FROM_INPUT_REG
+ *					  CMD_WR_UPDATE_DAC_REG
+ *					  CMD_WR_CTRL_REG
+ *					  CMD_SW_DATA_RESET
+ *					  CMD_DIS_DAISY_CHAIN
+ *					  CMD_RD_INPUT_REG
+ *					  CMD_RD_DAC_REG
+ *					  CMD_RD_CTRL_REG
+ *					  CMD_SW_FULL_RESET
+ * @param reg_data - The transmitted data.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
+		      uint8_t reg_addr_cmd,
+		      uint16_t reg_data)
 {
-    uint8_t buf[3] = { msb(frame, 0), msb(frame, 1), msb(frame, 2) };
+	HAL_StatusTypeDef ret = HAL_ERROR;
+	uint8_t data[3];
 
-    if (dev->CSn.Port) cs_assert(dev);
-    HAL_StatusTypeDef st = HAL_SPI_Transmit(dev->hspi, buf, sizeof(buf), HAL_MAX_DELAY);
-    if (dev->CSn.Port) cs_deassert(dev);
-    return st;
+	data[0] = reg_addr_cmd;
+	data[1] = (reg_data & 0xFF00) >> 8;
+	data[2] = (reg_data & 0x00FF) >> 0;
+	//printf("Sending d[0] = 0x%02X, d[1] = 0x%02X,d[2] = 0x%02X\r\n", data[0], data[1], data[2]);
+	cs_low(dev);
+	// ret = HAL_SPI_Transmit(dev->hspi, data, 3, HAL_MAX_DELAY);
+	ret = HAL_SPI_Transmit(dev->hspi, &data[0], 1, HAL_MAX_DELAY);
+	ret = HAL_SPI_Transmit(dev->hspi, &data[1], 1, HAL_MAX_DELAY);
+	ret = HAL_SPI_Transmit(dev->hspi, &data[2], 1, HAL_MAX_DELAY);
+	cs_high(dev);
+
+	return ret;
 }
 
-/* Two-frame transaction with /CS separation, receiving 3 bytes on the 2nd frame.
-   For readback: send cmd, then send NOOP while reading returned payload. */
-static HAL_StatusTypeDef txrx24_twostep(AD5761R_Handle *dev, uint32_t frame_cmd, uint32_t frame_noop, uint16_t *out16)
+/**
+ *  SPI read from device.
+ * @param dev - The device structure.
+ * @param reg_addr_cmd - The input shift register command.
+ *			 Accepted values: CMD_NOP
+ *					  CMD_WR_TO_INPUT_REG
+ *					  CMD_UPDATE_DAC_REG_FROM_INPUT_REG
+ *					  CMD_WR_UPDATE_DAC_REG
+ *					  CMD_WR_CTRL_REG
+ *					  CMD_SW_DATA_RESET
+ *					  CMD_DIS_DAISY_CHAIN
+ *					  CMD_RD_INPUT_REG
+ *					  CMD_RD_DAC_REG
+ *					  CMD_RD_CTRL_REG
+ *					  CMD_SW_FULL_RESET
+ * @param reg_data - The received data.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_read(ad5761r_dev *dev,
+		     uint8_t reg_addr_cmd,
+		     uint16_t *reg_data)
 {
-    uint8_t tx1[3] = { msb(frame_cmd, 0), msb(frame_cmd, 1), msb(frame_cmd, 2) };
-    uint8_t tx2[3] = { msb(frame_noop, 0), msb(frame_noop, 1), msb(frame_noop, 2) };
-    uint8_t rx2[3] = {0};
+	HAL_StatusTypeDef ret = HAL_ERROR;
+	uint8_t data[3];
+	uint8_t rx_data[3];
 
-    if (dev->CSn.Port) {
-        cs_assert(dev);
-        HAL_StatusTypeDef st = HAL_SPI_Transmit(dev->hspi, tx1, sizeof(tx1), HAL_MAX_DELAY);
-        cs_deassert(dev);
-        if (st != HAL_OK) return st;
+	data[0] = reg_addr_cmd;
+	data[1] = 0;
+	data[2] = 0;
+	cs_low(dev);
+	ret = HAL_SPI_TransmitReceive(dev->hspi, data, rx_data, 3, HAL_MAX_DELAY);
+	cs_high(dev);
 
-        cs_assert(dev);
-        st = HAL_SPI_TransmitReceive(dev->hspi, tx2, rx2, sizeof(tx2), HAL_MAX_DELAY);
-        cs_deassert(dev);
-        if (st != HAL_OK) return st;
-    } else {
-        /* If using hardware NSS, we cannot enforce an inter-frame CS toggle.
-           Most HAL configs will still toggle between calls; verify on logic analyzer. */
-        HAL_StatusTypeDef st = HAL_SPI_Transmit(dev->hspi, tx1, sizeof(tx1), HAL_MAX_DELAY);
-        if (st != HAL_OK) return st;
-        st = HAL_SPI_TransmitReceive(dev->hspi, tx2, rx2, sizeof(tx2), HAL_MAX_DELAY);
-        if (st != HAL_OK) return st;
-    }
+	*reg_data = (rx_data[1] << 8) | rx_data[2];
 
-    /* Return the lower 16 bits captured (device shifts data into D[15:0]) */
-    *out16 = ((uint16_t)rx2[1] << 8) | rx2[2];
+	return ret;
+}
+
+/**
+ * Readback the register data.
+ * Note: Readback operation is not enabled if daisy-chain mode is disabled.
+ * @param dev - The device structure.
+ * @param reg - The register to be read.
+ *		Accepted values: AD5761R_REG_INPUT
+ *				 AD5761R_REG_DAC
+ *				 AD5761R_REG_CTRL
+ * @param reg_data - The register data.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_register_readback(ad5761r_dev *dev,
+				  enum ad5761r_reg reg_addr_cmd,
+				  uint16_t *reg_data)
+{
+    HAL_StatusTypeDef ret;
+    uint8_t tx[3], rx[3];
+
+    // 1) Queue the read command (first frame) – result not valid yet
+    tx[0] = reg_addr_cmd;
+    tx[1] = 0;
+    tx[2] = 0;
+
+    //printf("Sending tx[2]= 0x%02X, tx[1]= 0x%02X, tx[0]= 0x%02X\r\n", tx[2],tx[1],tx[0]);
+    cs_low(dev);
+    ret = HAL_SPI_Transmit(dev->hspi, tx, 3, HAL_MAX_DELAY);
+    cs_high(dev);
+    if (ret != HAL_OK) return ret;
+
+    // 2) Clock out the result on the next frame (send NOP)
+    tx[0] = CMD_NOP; tx[1] = 0; tx[2] = 0;
+    cs_low(dev);
+    ret = HAL_SPI_Receive(dev->hspi, rx, 3, HAL_MAX_DELAY);
+    cs_high(dev);
+    if (ret != HAL_OK) return ret;
+
+    *reg_data = (rx[1] << 8) | rx[2];
     return HAL_OK;
 }
 
-/* ---- Public API ----------------------------------------------------------- */
-
-HAL_StatusTypeDef AD5761R_Init(AD5761R_Handle *dev)
+/**
+ * Configure the part based on the settings stored in the device structure.
+ * @param dev - The device structure.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_config(ad5761r_dev *dev)
 {
+	uint16_t reg_data;
+
+	reg_data = AD5761R_CTRL_CV(dev->cv) |
+		   (dev->ovr_en ? AD5761R_CTRL_OVR : 0) |
+		   (dev->b2c_range_en ? AD5761R_CTRL_B2C : 0) |
+		   (dev->exc_temp_sd_en ? AD5761R_CTRL_ETS : 0) |
+		   (dev->int_ref_en ? AD5761R_CTRL_IRO : 0) |
+		   AD5761R_CTRL_PV(dev->pv) |
+		   AD5761R_CTRL_RA(dev->ra);
+
+	printf("Config Data 0x%02X\r\n", reg_data);
+	return ad5761r_write(dev, CMD_WR_CTRL_REG, reg_data);
+}
+
+/**
+ * Enable/disable daisy-chain mode.
+ * @param dev - The device structure.
+ * @param en_dis - Set true in order to enable the daisy-chain mode.
+ *		   Accepted values: true
+ *				    false
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_daisy_chain_en_dis(ad5761r_dev *dev,
+				       bool en_dis)
+{
+	dev->daisy_chain_en = en_dis;
+
+	return ad5761r_write(dev, CMD_DIS_DAISY_CHAIN,
+			     AD5761R_DIS_DAISY_CHAIN_DDC(!en_dis));
+}
+
+/**
+ * Get the status of the daisy-chain mode.
+ * @param dev - The device structure.
+ * @param en_dis - The status of the daisy-chain mode (enabled, disabled).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(ad5761r_dev *dev,
+				       bool *en_dis)
+{
+	*en_dis = dev->daisy_chain_en;
+
+	return HAL_OK;
+}
+
+/**
+ * Set the output_range.
+ * @param dev - The device structure.
+ * @param out_range - The output range.
+ *		      Accepted values: AD5761R_RANGE_M_10V_TO_P_10V,
+ *				       AD5761R_RANGE_0_V_TO_P_10V
+ *				       AD5761R_RANGE_M_5V_TO_P_5V
+ *				       AD5761R_RANGE_0V_TO_P_5V
+ *				       AD5761R_RANGE_M_2V5_TO_P_7V5
+ *				       AD5761R_RANGE_M_3V_TO_P_3V
+ *				       AD5761R_RANGE_0V_TO_P_16V
+ *				       AD5761R_RANGE_0V_TO_P_20V
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_output_range(ad5761r_dev *dev,
+				 enum ad5761r_range out_range)
+{
+	dev->ra = out_range;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the output_range.
+ * @param dev - The device structure.
+ * @param out_range - The output range values.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_output_range(ad5761r_dev *dev,
+				 enum ad5761r_range *out_range)
+{
+	*out_range = dev->ra;
+
+	return HAL_OK;
+}
+
+/**
+ * Set the power up voltage.
+ * @param dev - The device structure.
+ * @param pv - The power up voltage.
+ *	       Accepted values: AD5761R_SCALE_ZERO
+ *				AD5761R_SCALE_HALF
+ *				AD5761R_SCALE_FULL
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_power_up_voltage(ad5761r_dev *dev,
+				     enum ad5761r_scale pv)
+{
+	dev->pv = pv;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the power up voltage.
+ * @param dev - The device structure.
+ * @param pv - The power up voltage.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_power_up_voltage(ad5761r_dev *dev,
+				     enum ad5761r_scale *pv)
+{
+	*pv = dev->pv;
+
+	return HAL_OK;
+}
+
+/**
+ * Set the clear voltage.
+ * @param dev - The device structure.
+ * @param cv - The clear voltage.
+ *	       Accepted values: AD5761R_SCALE_ZERO
+ *				AD5761R_SCALE_HALF
+ *				AD5761R_SCALE_FULL
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_clear_voltage(ad5761r_dev *dev,
+				  enum ad5761r_scale cv)
+{
+	dev->cv = cv;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the clear voltage.
+ * @param dev - The device structure.
+ * @param cv - The clear voltage.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_clear_voltage(ad5761r_dev *dev,
+				  enum ad5761r_scale *cv)
+{
+	*cv = dev->cv;
+
+	return HAL_OK;
+}
+
+/**
+ * Enable/disable internal reference.
+ * @param dev - The device structure.
+ * @param en_dis - Set true in order to enable the internal reference.
+ *		   Accepted values: true
+ *				    false
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_internal_reference_en_dis(ad5761r_dev *dev,
+		bool en_dis)
+{
+	dev->int_ref_en = en_dis;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the status of the internal reference.
+ * @param dev - The device structure.
+ * @param en_dis - The status of the internal reference (enabled, disabled).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(ad5761r_dev *dev,
+		bool *en_dis)
+{
+	*en_dis = dev->int_ref_en;
+
+	return HAL_OK;
+}
+
+/**
+ * Enable/disable ETS (exceed temperature shutdown) function.
+ * @param dev - The device structure.
+ * @param en_dis - Set true in order to enable the ETS function.
+ *		   Accepted values: true
+ *				    false
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
+		bool en_dis)
+{
+	dev->exc_temp_sd_en = en_dis;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the status of the ETS (exceed temperature shutdown) function.
+ * @param dev - The device structure.
+ * @param en_dis - The status of the ETS function (enabled, disabled).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
+		bool *en_dis)
+{
+	*en_dis = dev->exc_temp_sd_en;
+
+	return HAL_OK;
+}
+
+/**
+ * Enable/disable the twos complement bipolar output range.
+ * @param dev - The device structure.
+ * @param en_dis - Set true in order to enable the twos complement bipolar
+ *		   output range.
+ *		   Accepted values: true
+ *				    false
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_2c_bipolar_range_en_dis(ad5761r_dev *dev,
+		bool en_dis)
+{
+	dev->b2c_range_en = en_dis;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the status of the twos complement bipolar output range.
+ * @param dev - The device structure.
+ * @param en_dis - The status of the twos complement bipolar output range
+ *		   (enabled, disabled).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(ad5761r_dev *dev,
+		bool *en_dis)
+{
+	*en_dis = dev->b2c_range_en;
+
+	return HAL_OK;
+}
+
+/**
+ * Enable/disable the 5% overrange.
+ * @param dev - The device structure.
+ * @param en_dis - Set true in order to enable the 5% overrange.
+ *		   Accepted values: true
+ *				    false
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_overrange_en_dis(ad5761r_dev *dev,
+				     bool en_dis)
+{
+	dev->ovr_en = en_dis;
+
+	return ad5761r_config(dev);
+}
+
+/**
+ * Get the status of the 5% overrange.
+ * @param dev - The device structure.
+ * @param en_dis - The status of the twos 5% overrange (enabled, disabled).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_overrange_en_dis(ad5761r_dev *dev,
+				     bool *en_dis)
+{
+	*en_dis = dev->ovr_en;
+
+	return HAL_OK;
+}
+
+/**
+ * Get the short-circuit condition.
+ * Note: The condition is reset at every control register write.
+ * @param dev - The device structure.
+ * @param sc - The status of the short-circuit condition (detected,
+ *		   not detected).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_short_circuit_condition(ad5761r_dev *dev,
+		bool *sc)
+{
+	uint16_t reg_data;
+	HAL_StatusTypeDef ret;
+
+	ret = ad5761r_read(dev, CMD_RD_CTRL_REG, &reg_data);
+	*sc = ((reg_data & AD5761R_CTRL_SC) >> 12);
+
+	return ret;
+}
+
+/**
+ * Get the brownout condition.
+ * Note: The condition is reset at every control register write.
+ * @param dev - The device structure.
+ * @param bo - The status of the brownout condition (detected,
+ *		   not detected).
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_brownout_condition(ad5761r_dev *dev,
+				       bool *bo)
+{
+	uint16_t reg_data;
+	HAL_StatusTypeDef ret;
+
+	ret = ad5761r_read(dev, CMD_RD_CTRL_REG, &reg_data);
+	*bo = ((reg_data & AD5761R_CTRL_BO) >> 11);
+
+	return ret;
+}
+
+/**
+ * Set the reset pin value.
+ * @param dev - The device structure.
+ * @param value - The pin value.
+ *		  Accepted values: NO_OS_GPIO_LOW
+ *  				   NO_OS_GPIO_HIGH
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_reset_pin(ad5761r_dev *dev,
+		GPIO_PinState value)
+{
+	if (dev->rst_port) {
+		drv_gpio_write(dev->rst_port, dev->rst_pin, value);
+	}
+
+	return HAL_OK;
+}
+
+/**
+ * Get the reset pin value.
+ * @param dev - The device structure.
+ * @param value - The pin value.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_reset_pin(ad5761r_dev *dev,
+		GPIO_PinState *value)
+{
+	if (dev->rst_port) {
+		*value = drv_gpio_read(dev->rst_port, dev->rst_pin);
+		return HAL_OK;
+	}
+
+	return HAL_ERROR;
+}
+
+/**
+ * Set the clr pin value.
+ * @param dev - The device structure.
+ * @param value - The pin value.
+ *		  Accepted values: NO_OS_GPIO_LOW
+ *  				   NO_OS_GPIO_HIGH
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_clr_pin(ad5761r_dev *dev,
+		GPIO_PinState value)
+{
+	if (dev->clr_port) {
+		drv_gpio_write(dev->clr_port, dev->clr_pin, value);
+	}
+
+	return HAL_OK;
+}
+
+/**
+ * Get the clr pin value.
+ * @param dev - The device structure.
+ * @param value - The pin value.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_clr_pin(ad5761r_dev *dev,
+		GPIO_PinState *value)
+{
+	if (dev->clr_port) {
+		*value = drv_gpio_read(dev->clr_port, dev->clr_pin);
+		return HAL_OK;
+	}
+
+	return HAL_ERROR;
+}
+
+/**
+ * Set the ldac pin value.
+ * @param dev - The device structure.
+ * @param value - The pin value.
+ *		  Accepted values: NO_OS_GPIO_LOW
+ *  				   NO_OS_GPIO_HIGH
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_set_ldac_pin(ad5761r_dev *dev,
+		GPIO_PinState value)
+{
+	if (dev->ldac_port) {
+		drv_gpio_write(dev->ldac_port, dev->ldac_pin, value);
+	}
+
+	return HAL_OK;
+}
+
+/**
+ * Get the ldac pin value.
+ * @param dev - The device structure.
+ * @param value - The pin value.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_get_ldac_pin(ad5761r_dev *dev,
+		GPIO_PinState *value)
+{
+	if (dev->ldac_port) {
+		*value = drv_gpio_read(dev->ldac_port, dev->ldac_pin);
+		return HAL_OK;
+	}
+
+	return HAL_ERROR;
+}
+
+/**
+ * Write to input register.
+ * @param dev - The device structure.
+ * @param dac_data - The DAC data.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_write_input_register(ad5761r_dev *dev,
+				     uint16_t dac_data)
+{
+	uint16_t reg_data;
+
+	if (dev->type == AD5761R)
+		reg_data = AD5761R_DATA(dac_data);
+	else
+		reg_data = AD5721R_DATA(dac_data);
+
+	return ad5761r_write(dev, CMD_WR_TO_INPUT_REG, reg_data);
+}
+
+/**
+ * Update DAC register.
+ * @param dev - The device structure.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_update_dac_register(ad5761r_dev *dev)
+{
+	return ad5761r_write(dev, CMD_UPDATE_DAC_REG, 0);
+}
+
+/**
+ * Write to input register and update DAC register.
+ * @param dev - The device structure.
+ * @param dac_data - The register data.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_write_update_dac_register(ad5761r_dev *dev,
+		uint16_t dac_data)
+{
+	uint16_t reg_data;
+
+	if (dev->type == AD5761R)
+		reg_data = AD5761R_DATA(dac_data);
+	else
+		reg_data = AD5721R_DATA(dac_data);
+
+	return ad5761r_write(dev, CMD_WR_UPDATE_DAC_REG, reg_data);
+}
+
+/**
+ * Software data reset.
+ * @param dev - The device structure.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_software_data_reset(ad5761r_dev *dev)
+{
+	return ad5761r_write(dev, CMD_SW_DATA_RESET, 0);
+}
+
+/**
+ * Software full reset.
+ * @param dev - The device structure.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_software_full_reset(ad5761r_dev *dev)
+{
+	return ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
+}
+
+/**
+ * Initialize the device.
+ * @param device - The device structure.
+ * @return 0 in case of success, negative error code otherwise.
+ */
+HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
+{
+	HAL_StatusTypeDef ret = HAL_ERROR;
+
     if (!dev || !dev->hspi) return HAL_ERROR;
-    if (dev->use_internal_ref) {
-        /* Internal reference is 2.5V (per family ‘R’ parts); keep external for non-R unless verified */
-        dev->vref_mV = 2500;
-    } else {
-        if (dev->vref_mV < 2000 || dev->vref_mV > 3000) return HAL_ERROR;
-    }
-    if (dev->n_bits == 0) dev->n_bits = 16; /* default for AD5761(R) */
 
-    /* Make sure optional pins default high (inactive) */
-    drv_gpio_write(dev->CSn,    GPIO_PIN_SET);
+    //ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
+	HAL_Delay(1);
+	ret = ad5761r_config(dev);
 
-    /* SW full reset */
-    HAL_StatusTypeDef st = tx24(dev, AD5761_ADDR(AD5761_ADDR_SW_FULL_RESET) | 0x0000);
-    if (st != HAL_OK) return st;
 
-    /* Program CTRL: range + ETS (+ internal ref if requested) */
-    uint16_t ctrl = (uint16_t)((dev->range & 0x7) | AD5761_CTRL_ETS);
-    if (dev->use_internal_ref) ctrl |= AD5761_CTRL_USE_INTVREF;
+	return ret;
 
-    st = tx24(dev, AD5761_ADDR(AD5761_ADDR_CTRL_WRITE_REG) | ctrl);
-    if (st != HAL_OK) return st;
-
-    /* Optional: Software data reset to midscale */
-    // st = tx24(dev, AD5761_ADDR(AD5761_ADDR_SW_DATA_RESET) | 0x0000);
-
-    return st;
-}
-
-HAL_StatusTypeDef AD5761R_SoftwareFullReset(AD5761R_Handle *dev)
-{
-    if (!dev) return HAL_ERROR;
-    return tx24(dev, AD5761_ADDR(AD5761_ADDR_SW_FULL_RESET) | 0x0000);
-}
-
-HAL_StatusTypeDef AD5761R_SoftwareDataReset(AD5761R_Handle *dev)
-{
-    if (!dev) return HAL_ERROR;
-    return tx24(dev, AD5761_ADDR(AD5761_ADDR_SW_DATA_RESET) | 0x0000);
-}
-
-HAL_StatusTypeDef AD5761R_SetRange(AD5761R_Handle *dev, AD5761R_Range range)
-{
-    if (!dev) return HAL_ERROR;
-
-    /* Re-issue CTRL with new range */
-    uint16_t ctrl = (uint16_t)((range & 0x7) | AD5761_CTRL_ETS);
-    if (dev->use_internal_ref) ctrl |= AD5761_CTRL_USE_INTVREF;
-
-    /* The Linux driver does a SW full reset before setting CTRL; we follow that for safety */
-    HAL_StatusTypeDef st = AD5761R_SoftwareFullReset(dev);
-    if (st != HAL_OK) return st;
-
-    st = tx24(dev, AD5761_ADDR(AD5761_ADDR_CTRL_WRITE_REG) | ctrl);
-    if (st == HAL_OK) dev->range = range;
-    return st;
-}
-
-HAL_StatusTypeDef AD5761R_WriteRaw(AD5761R_Handle *dev, uint16_t code)
-{
-    if (!dev) return HAL_ERROR;
-
-    /* If device resolution < 16, left-shift to 16-bit storage */
-    uint8_t shift = (uint8_t)(16 - (dev->n_bits > 16 ? 16 : dev->n_bits));
-    uint16_t payload = (uint16_t)(code << shift);
-
-    HAL_StatusTypeDef st = tx24(dev, AD5761_ADDR(AD5761_ADDR_DAC_WRITE) | payload);
-    if (st == HAL_OK) {
-        dev->last_code = payload;
-    }
-    return st;
-}
-
-HAL_StatusTypeDef AD5761R_ReadRaw(AD5761R_Handle *dev, uint16_t *out_code)
-{
-    if (!dev || !out_code) return HAL_ERROR;
-
-    uint16_t readback = 0;
-    HAL_StatusTypeDef st = txrx24_twostep(
-        dev,
-        AD5761_ADDR(AD5761_ADDR_DAC_READ),           /* 1st frame: request readback */
-        AD5761_ADDR(AD5761_ADDR_NOOP),               /* 2nd frame: NOOP clocks data out */
-        &readback
-    );
-    if (st != HAL_OK) return st;
-
-    /* Right-justify for caller according to n_bits */
-    uint8_t shift = (uint8_t)(16 - (dev->n_bits > 16 ? 16 : dev->n_bits));
-    *out_code = (uint16_t)(readback >> shift);
-    return HAL_OK;
-}
-
-/* scale = (vref_mV * m / 10) / 2^n_bits  (per Linux driver’s IIO scale reporting) */
-void AD5761R_GetScale_mV_per_code(const AD5761R_Handle *dev, int32_t *num_mV, uint8_t *den_pow2)
-{
-    int32_t m = s_range[dev->range].m;
-    int32_t num = (int32_t)dev->vref_mV * m; /* mV * m */
-    /* Linux divides by 10 after multiplying by m */
-    if (num_mV) *num_mV = num / 10;
-    if (den_pow2) *den_pow2 = dev->n_bits;
-}
-
-/* offset (LSBs) = -2^n_bits * c / m */
-int32_t AD5761R_GetOffset_LSB(const AD5761R_Handle *dev)
-{
-    int32_t m = s_range[dev->range].m;
-    int32_t c = s_range[dev->range].c;
-    int32_t two_pow_n = (dev->n_bits >= 31) ? 0x7FFFFFFF : (1 << dev->n_bits); /* safe */
-    return -( (two_pow_n * c) / m );
-}
-
-/* Vout = ((Code/2^n_bits) * (m * Vref/10)) - (c * Vref/10)
-   => Code = clamp( round( (Vout + c*Vref/10) * 2^n / (m*Vref/10) ), 0 .. 2^n-1 ) */
-HAL_StatusTypeDef AD5761R_SetVoltage_mV(AD5761R_Handle *dev, int32_t vout_mV)
-{
-    if (!dev) return HAL_ERROR;
-
-    const range_param_t rp = s_range[dev->range];
-    const int32_t Vref10 = (int32_t)dev->vref_mV / 10; /* Vref/10 in mV */
-    if (Vref10 <= 0) return HAL_ERROR;
-
-    const int32_t n = dev->n_bits > 16 ? 16 : dev->n_bits;
-    const int32_t fullscale = (1 << n);
-
-    /* Compute code in Q0 integer math */
-    /* num = (Vout + c*Vref/10) * 2^n */
-    int64_t num = (int64_t)vout_mV + (int64_t)rp.c * Vref10;
-    num *= (int64_t)fullscale;
-
-    /* den = m*Vref/10 */
-    int64_t den = (int64_t)rp.m * Vref10;
-    if (den == 0) return HAL_ERROR;
-
-    int64_t code = (num + (den > 0 ? den/2 : 0)) / den; /* round */
-
-    if (code < 0) code = 0;
-    if (code > (fullscale - 1)) code = fullscale - 1;
-
-    return AD5761R_WriteRaw(dev, (uint16_t)code);
-}
-
-int32_t AD5761R_GetVoltage_mV(AD5761R_Handle *dev)
-{
-    uint16_t code;
-    if (AD5761R_ReadRaw(dev, &code) != HAL_OK) {
-        return -1; // error indicator
-    }
-
-    const int32_t n = dev->n_bits > 16 ? 16 : dev->n_bits;
-    const int32_t fullscale = (1 << n);
-    const int32_t Vref10 = dev->vref_mV / 10;
-
-    const int32_t m = s_range[dev->range].m;
-    const int32_t c = s_range[dev->range].c;
-
-    // Vout = (code/2^n * m * Vref/10) - (c * Vref/10)
-    int64_t num = (int64_t)code * m * Vref10;
-    int32_t vout_mV = (int32_t)(num / fullscale) - (c * Vref10);
-
-    return vout_mV;
-}
-
-HAL_StatusTypeDef AD5761R_ReadControl(const AD5761R_Handle *dev, uint16_t *out_ctrl)
-{
-    if (!dev || !out_ctrl) return HAL_ERROR;
-
-    uint16_t rb = 0;
-    /* Issue CTRL_READ (first frame), then NOOP (second) to clock data out */
-    HAL_StatusTypeDef st = txrx24_twostep(
-        (AD5761R_Handle*)dev,
-        AD5761_ADDR(AD5761_ADDR_CTRL_READ_REG),
-        AD5761_ADDR(AD5761_ADDR_NOOP),
-        &rb
-    );
-    if (st != HAL_OK) return st;
-
-    /* Device returns 16 bits; the CTRL content is in the lower byte per datasheet.
-       Keep 16 bits to match how we wrote it (we only use lower bits anyway). */
-    *out_ctrl = rb & 0x00FF;
-    return HAL_OK;
-}
-
-HAL_StatusTypeDef AD5761R_CheckComms(const AD5761R_Handle *dev)
-{
-    if (!dev) return HAL_ERROR;
-
-    uint16_t ctrl = 0;
-    HAL_StatusTypeDef st = AD5761R_ReadControl(dev, &ctrl);
-    if (st != HAL_OK) return st;
-
-    /* Expected CTRL we programmed in Init(): range + ETS + (optional) internal VREF */
-    uint16_t expected = (uint16_t)((dev->range & 0x7) | AD5761_CTRL_ETS);
-    if (dev->use_internal_ref) expected |= AD5761_CTRL_USE_INTVREF;
-
-    /* Only compare the bits we care about (range + ETS + USE_INTVREF) */
-    uint16_t mask = (uint16_t)(0x07 | AD5761_CTRL_ETS | AD5761_CTRL_USE_INTVREF);
-
-    return ((ctrl & mask) == (expected & mask)) ? HAL_OK : HAL_ERROR;
 }

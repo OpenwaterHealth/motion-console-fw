@@ -99,7 +99,7 @@ extern ADS7828_HandleTypeDef adc_mon[2];
 
 extern FAN_Driver fan;
 
-AD5761R_Handle tec_dac;
+ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
 
 
@@ -283,40 +283,40 @@ int main(void)
 
   // configure TEC DAC
   printf("Initialize TEC DAC\r\n");
-  tec_dac.hspi = &hspi1;
-  tec_dac.CSn.Port = TECDAC_SS_GPIO_Port;
-  tec_dac.CSn.Pin = TECDAC_SS_Pin;
-  tec_dac.use_internal_ref = true;
-  tec_dac.vref_mV = 2500;
-  tec_dac.range = AD5761_VOLTAGE_RANGE_0V_5V;
-  tec_dac.n_bits = 16;
+  ad5761r_dev tec_dac = {
+	  .hspi = &hspi1,
+	  .cs_port=TECDAC_SS_GPIO_Port, .cs_pin=TECDAC_SS_Pin,
+	  .ldac_port=NULL, .ldac_pin=0,
+	  .clr_port=NULL,  .clr_pin=0,
+	  .rst_port=NULL,  .rst_pin=0,
 
-  if (AD5761R_Init(&tec_dac) != HAL_OK) {
+	  .type=AD5761R,
+	  .ra=AD5761R_RANGE_0V_TO_P_5V,
+	  .pv=AD5761R_SCALE_FULL,
+	  .cv=AD5761R_SCALE_FULL,
+	  .int_ref_en=true,
+	  .exc_temp_sd_en=true,
+	  .b2c_range_en=false,
+	  .ovr_en=false,
+	  .daisy_chain_en=false
+  };
+
+  if(ad5761r_write(&tec_dac, CMD_SW_DATA_RESET, 0x0000) != HAL_OK){
 	  printf("Failed to initialize TEC DAC\r\n");
   } else {
-    uint16_t ctrl = 0;
-    if (AD5761R_ReadControl(&tec_dac, &ctrl) == HAL_OK) {
-	  printf("AD5761R CTRL=0x%02X\r\n", ctrl & 0xFF);
-    } else {
-	  printf("Failed to read AD5761R CTRL\r\n");
-    }
+		uint16_t reg_data;
+		if(ad5761r_write(&tec_dac, CMD_WR_CTRL_REG, 0x0433) != HAL_OK){
+		  printf("Failed to write control register of TEC DAC\r\n");
+		}
 
-    if (AD5761R_CheckComms(&tec_dac) == HAL_OK) {
-	  printf("AD5761R comms OK (range/VREF bits match)\r\n");
-    } else {
-	  printf("AD5761R comms mismatch (range/VREF bits differ)\r\n");
-    }
+		ad5761r_read(&tec_dac, CMD_RD_CTRL_REG, &reg_data);
+		printf("Read Control REG 0x%04X\r\n", reg_data);
 
-	// Example: set 2000 mV
-	AD5761R_SetVoltage_mV(&tec_dac, 0);
+		// 1. Write the desired value to the input register
+		ad5761r_write(&tec_dac, CMD_WR_UPDATE_DAC_REG, 0x7FFF);
 
-	// Read back
-	int32_t v = AD5761R_GetVoltage_mV(&tec_dac);
-	if (v >= 0) {
-		printf("TEC DAC output = %ld mV\r\n", (long)v);
-	} else {
-		printf("Failed to read DAC voltage\r\n");
-	}
+		ad5761r_read(&tec_dac, CMD_RD_DAC_REG, &reg_data);
+		printf("Read DAC Data 0x%04X\r\n", reg_data); // This should now also be 0xFFFF
   }
 
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
@@ -782,14 +782,14 @@ static void MX_SPI1_Init(void)
   hspi1.Init.Direction = SPI_DIRECTION_2LINES;
   hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
   hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   hspi1.Init.CRCPolynomial = 0x0;
-  hspi1.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
   hspi1.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
   hspi1.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
   hspi1.Init.TxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
