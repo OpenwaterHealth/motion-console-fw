@@ -19,6 +19,9 @@ Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
 
+uint32_t prev_lsync_arr = 0;
+uint32_t prev_lsync_ccr1 = 0;
+
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
       strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
@@ -119,7 +122,6 @@ static void updateTimerDataFromPeripheral()
 	 trigger_config.TriggerStatus = TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 }
 
-
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     if (config == NULL) {
         return HAL_ERROR; // Null pointer guard
@@ -170,7 +172,6 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     trigger_config = *config;
     return HAL_OK;
 }
-
 
 HAL_StatusTypeDef Trigger_Start() {
 
@@ -246,7 +247,8 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
     if (trigger_config.LaserPulseSkipInterval > 0) {
 
 		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0) {
-			// Disable LASER_TIMER triggering this cycle
+			/*
+            // Disable LASER_TIMER triggering this cycle
 			__HAL_TIM_DISABLE(&LASER_TIMER);
 			__HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
 			__HAL_TIM_MOE_DISABLE(&LASER_TIMER);
@@ -254,15 +256,37 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 
 			// Remove trigger by disabling slave mode
 			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
+            */
+
+            // Save previous values for laser ARR/CRR1
+            prev_lsync_arr = LASER_TIMER.Instance->ARR;
+            prev_lsync_ccr1 = LASER_TIMER.Instance->CCR1;
+
+            // Set laser timer to a time beyond the next fsync pulse
+            uint32_t pulse_delay_time_us = 10000;
+            LASER_TIMER.Instance->ARR = prev_lsync_arr + pulse_delay_time_us;
+            LASER_TIMER.Instance->CCR1 = prev_lsync_ccr1 + pulse_delay_time_us;
+
+            // force laser timer update
+            LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
+
+
 		} else {
-			// Re-enable one pulse slave trigger
+			/*
+            // Re-enable one pulse slave trigger
 			__HAL_TIM_DISABLE(&LASER_TIMER);
 			__HAL_TIM_MOE_ENABLE(&LASER_TIMER);
 			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS; // Clear first
 			LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER;
-		}
-    }
+		    */
 
+            // Restore previous values for laser ARR/CCR1
+            LASER_TIMER.Instance->ARR = prev_lsync_arr;
+            LASER_TIMER.Instance->CCR1 = prev_lsync_ccr1;
+            // force laser timer update
+            LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
+        }
+    }
 #if 0
     if (fsync_counter % 200 == 0) {
     	printf("FSYNC tick: %lu\r\n", fsync_counter);
