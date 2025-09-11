@@ -31,6 +31,7 @@
 #include "tca9548a.h"
 #include "pca9535.h"
 #include "ads7828.h"
+#include "ads7924.h"
 #include "fan_driver.h"
 #include "ad5761r.h"
 #include "utils.h"
@@ -96,6 +97,7 @@ uint8_t txBuffer[COMMAND_MAX_SIZE];
 // Declare handles for your two multiplexers
 extern TCA9548A_HandleTypeDef iic_mux[2];
 extern ADS7828_HandleTypeDef adc_mon[2];
+ADS7924_HandleTypeDef ads;
 
 extern FAN_Driver fan;
 
@@ -363,6 +365,7 @@ int main(void)
 
 #endif
 
+  ADS7924_Init(&ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
   FAN_Init(&fan, &hi2c4, 0x2C);
 
   uint8_t fan_dev_id = FAN_ReadDeviceID(&fan);
@@ -1294,9 +1297,10 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN 5 */
   printf("USB started\r\n");
   /* Infinite loop */
+
   for(;;)
   {
-	osDelay(250);
+	osDelay(5000);
   }
   /* USER CODE END 5 */
 }
