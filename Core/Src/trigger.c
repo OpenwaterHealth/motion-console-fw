@@ -19,8 +19,10 @@ Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
 
-uint32_t prev_lsync_arr = 0;
-uint32_t prev_lsync_ccr1 = 0;
+uint32_t short_lsync_arr = 0;
+uint32_t long_lsync_arr = 0;
+uint32_t short_lsync_ccr1 = 0;
+uint32_t long_lsync_ccr1 = 0;
 
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
@@ -122,6 +124,7 @@ static void updateTimerDataFromPeripheral()
 	 trigger_config.TriggerStatus = TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 }
 
+
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     if (config == NULL) {
         return HAL_ERROR; // Null pointer guard
@@ -161,17 +164,31 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
 
     uint32_t laser_delay_ticks = config->laserPulseDelayUsec;
     uint32_t laser_width_ticks = config->laserPulseWidthUsec;
-    LASER_TIMER.Instance->ARR = laser_delay_ticks + laser_width_ticks - 1;
+
+    uint32_t laser_delay = 400;
+
+    short_lsync_arr = laser_delay_ticks + laser_width_ticks - 1;
+    long_lsync_arr = short_lsync_arr + laser_delay;
+
+    short_lsync_ccr1 = laser_delay_ticks;
+    long_lsync_ccr1 = laser_delay_ticks + laser_delay;
+
+    LASER_TIMER.Instance->ARR = short_lsync_arr;
     LASER_TIMER.Instance->CCR1 = laser_delay_ticks;
 
     // Force register update
     FSYNC_TIMER.Instance->EGR |= TIM_EGR_UG;
     LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
 
+    LASER_TIMER.Instance->CR1 |= TIM_CR1_ARPE;
+    LASER_TIMER.Instance->CCMR1 |= TIM_CCMR1_OC1PE;       // CCR1 preload
+
+
     // Update the global trigger configuration
     trigger_config = *config;
     return HAL_OK;
 }
+
 
 HAL_StatusTypeDef Trigger_Start() {
 
@@ -247,7 +264,7 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
     if (trigger_config.LaserPulseSkipInterval > 0) {
 
 		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0) {
-			/*
+#if 0
             // Disable LASER_TIMER triggering this cycle
 			__HAL_TIM_DISABLE(&LASER_TIMER);
 			__HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
@@ -256,37 +273,30 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 
 			// Remove trigger by disabling slave mode
 			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
-            */
+#else
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
+            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
 
-            // Save previous values for laser ARR/CRR1
-            prev_lsync_arr = LASER_TIMER.Instance->ARR;
-            prev_lsync_ccr1 = LASER_TIMER.Instance->CCR1;
-
-            // Set laser timer to a time beyond the next fsync pulse
-            uint32_t pulse_delay_time_us = 10000;
-            LASER_TIMER.Instance->ARR = prev_lsync_arr + pulse_delay_time_us;
-            LASER_TIMER.Instance->CCR1 = prev_lsync_ccr1 + pulse_delay_time_us;
-
-            // force laser timer update
             LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
 
-
-		} else {
-			/*
+#endif
+        } else {
+#if 0
             // Re-enable one pulse slave trigger
 			__HAL_TIM_DISABLE(&LASER_TIMER);
 			__HAL_TIM_MOE_ENABLE(&LASER_TIMER);
 			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS; // Clear first
 			LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER;
-		    */
+#else
+        __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
+        __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
+        LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
 
-            // Restore previous values for laser ARR/CCR1
-            LASER_TIMER.Instance->ARR = prev_lsync_arr;
-            LASER_TIMER.Instance->CCR1 = prev_lsync_ccr1;
-            // force laser timer update
-            LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
+#endif
         }
+            
     }
+
 #if 0
     if (fsync_counter % 200 == 0) {
     	printf("FSYNC tick: %lu\r\n", fsync_counter);
