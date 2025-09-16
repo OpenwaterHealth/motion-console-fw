@@ -277,8 +277,6 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
             __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
             __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
 
-            LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
-
 #endif
         } else {
 #if 0
@@ -290,7 +288,6 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 #else
         __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
         __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
-        LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
 
 #endif
         }
