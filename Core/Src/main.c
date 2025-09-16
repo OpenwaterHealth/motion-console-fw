@@ -1226,6 +1226,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM4) {
 
   }
+  if (htim->Instance == FSYNC_TIMER.Instance) {
+    FSYNC_PeriodElapsedCallback(htim);
+  }
 
   if (htim->Instance == TIM12) {
 	  CDC_Idle_Timer_Handler();

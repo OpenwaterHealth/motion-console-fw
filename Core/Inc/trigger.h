@@ -37,6 +37,8 @@ uint32_t get_fsync_pulse_count(void);
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 
+void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+
 extern Trigger_Config_t trigger_config;
 
 #endif /* INC_TRIGGER_H_ */

@@ -167,7 +167,7 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     uint32_t laser_delay_ticks = config->laserPulseDelayUsec;
     uint32_t laser_width_ticks = config->laserPulseWidthUsec;
 
-    uint32_t laser_delay = 400;
+    uint32_t laser_delay = 1000;
 
     short_lsync_arr = laser_delay_ticks + laser_width_ticks - 1;
     long_lsync_arr = short_lsync_arr + laser_delay;
@@ -182,9 +182,12 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     FSYNC_TIMER.Instance->EGR |= TIM_EGR_UG;
     LASER_TIMER.Instance->EGR |= TIM_EGR_UG;
 
-    LASER_TIMER.Instance->CR1 |= TIM_CR1_ARPE;
-    LASER_TIMER.Instance->CCMR1 |= TIM_CCMR1_OC1PE;       // CCR1 preload
+    LASER_TIMER.Instance->CR1 |= TIM_CR1_ARPE;            // ARR preload enable
+    LASER_TIMER.Instance->CCMR1 |= TIM_CCMR1_OC1PE;       // CCR1 preload enable
 
+    // Enable the interrupt that happens when FSYNC TRGO fires
+    __HAL_TIM_CLEAR_FLAG(&FSYNC_TIMER, TIM_FLAG_UPDATE);
+    __HAL_TIM_ENABLE_IT(&FSYNC_TIMER, TIM_IT_UPDATE);
 
     // Update the global trigger configuration
     trigger_config = *config;
@@ -262,56 +265,29 @@ uint32_t get_fsync_pulse_count(void)
 
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    fsync_counter++;
-
-    if (trigger_config.LaserPulseSkipInterval > 0) {
-
-		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0) {
-#if 0
-            // Disable LASER_TIMER triggering this cycle
-			__HAL_TIM_DISABLE(&LASER_TIMER);
-			__HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
-			__HAL_TIM_MOE_DISABLE(&LASER_TIMER);
-			__HAL_TIM_DISABLE_DMA(&LASER_TIMER, TIM_DMA_UPDATE);
-
-			// Remove trigger by disabling slave mode
-			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS;
-#else
-            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
-            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
-
-#endif
-        } else {
-#if 0
-            // Re-enable one pulse slave trigger
-			__HAL_TIM_DISABLE(&LASER_TIMER);
-			__HAL_TIM_MOE_ENABLE(&LASER_TIMER);
-			LASER_TIMER.Instance->SMCR &= ~TIM_SMCR_SMS; // Clear first
-			LASER_TIMER.Instance->SMCR |= TIM_SLAVEMODE_TRIGGER;
-#else
-        __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
-        __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
-
-#endif
-        }
-            
-    }
-
-#if 0
-    if (fsync_counter % 200 == 0) {
-    	printf("FSYNC tick: %lu\r\n", fsync_counter);
-    }
-#endif
-
-    // Disable fsync output
+    // Disable fsync output when the flag goes high on the last pulse
     if(fsync_disable_flag){
         HAL_TIM_OC_Stop_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
         fsync_disable_flag = false;
     }
-
-
 }
 
+void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    fsync_counter++;
+    if (trigger_config.LaserPulseSkipInterval > 0) {
+
+		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0) {
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
+            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
+            printf("Long LSYNC\r\n");
+        } else {
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
+            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
+            printf("Short LSYNC\r\n");
+        }
+    }
+}
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
     lsync_counter++;
