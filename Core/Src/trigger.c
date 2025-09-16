@@ -24,6 +24,8 @@ uint32_t long_lsync_arr = 0;
 uint32_t short_lsync_ccr1 = 0;
 uint32_t long_lsync_ccr1 = 0;
 
+bool fsync_disable_flag = false;
+
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
       strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
@@ -207,9 +209,10 @@ HAL_StatusTypeDef Trigger_Start() {
 }
 
 HAL_StatusTypeDef Trigger_Stop() {
-	if (HAL_TIM_OC_Stop_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
-        return HAL_ERROR; // Handle error
-	}
+
+    fsync_disable_flag = true;
+
+    __HAL_TIM_DISABLE(&LASER_TIMER);
 
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
@@ -299,6 +302,13 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
     	printf("FSYNC tick: %lu\r\n", fsync_counter);
     }
 #endif
+
+    // Disable fsync output
+    if(fsync_disable_flag){
+        HAL_TIM_OC_Stop_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
+        fsync_disable_flag = false;
+    }
+
 
 }
 
