@@ -24,6 +24,7 @@ typedef struct {
     bool EnableSyncOut;
     bool EnableTaTrigger;
     uint32_t TriggerStatus;
+    uint32_t LaserPulseSkipDelayUsec;
 } Trigger_Config_t;
 
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config);

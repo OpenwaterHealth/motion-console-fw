@@ -77,9 +77,11 @@ static int jsonToTriggerConfigData(const char *jsonString, Trigger_Config_t* new
         } else if (jsoneq(jsonString, &t[i], "EnableTaTrigger") == 0) {
             newConfig->EnableTaTrigger = (strncmp(jsonString + t[i + 1].start, "true", 4) == 0);
             i++;
+        } else if (jsoneq(jsonString, &t[i], "LaserPulseSkipDelayUsec") == 0) {
+            newConfig->LaserPulseSkipDelayUsec = strtoul(jsonString + t[i + 1].start, NULL, 10);
+            i++;
         }
     }
-
     return 0; // Success
 }
 
@@ -93,6 +95,7 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              "\"LaserPulseDelayUsec\": %lu,"
              "\"LaserPulseWidthUsec\": %lu,"
              "\"LaserPulseSkipInterval\": %lu,"
+             "\"LaserPulseSkipDelayUsec\": %lu,"
              "\"EnableSyncOut\": %s,"
              "\"EnableTaTrigger\": %s,"
              "\"TriggerStatus\": %lu"
@@ -102,6 +105,7 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              trigger_config.laserPulseDelayUsec,
              trigger_config.laserPulseWidthUsec,
              trigger_config.LaserPulseSkipInterval,
+             trigger_config.LaserPulseSkipDelayUsec,
              trigger_config.EnableSyncOut ? "true" : "false",
              trigger_config.EnableTaTrigger ? "true" : "false",
 			 trigger_config.TriggerStatus);
@@ -167,8 +171,8 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     uint32_t laser_delay_ticks = config->laserPulseDelayUsec;
     uint32_t laser_width_ticks = config->laserPulseWidthUsec;
 
-    uint32_t laser_delay = 1000;
-
+    uint32_t laser_delay = config->LaserPulseSkipDelayUsec;
+    
     short_lsync_arr = laser_delay_ticks + laser_width_ticks - 1;
     long_lsync_arr = short_lsync_arr + laser_delay;
 
