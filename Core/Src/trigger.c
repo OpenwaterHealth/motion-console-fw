@@ -179,8 +179,8 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     short_lsync_ccr1 = laser_delay_ticks;
     long_lsync_ccr1 = laser_delay_ticks + laser_delay;
 
-    LASER_TIMER.Instance->ARR = short_lsync_arr;
-    LASER_TIMER.Instance->CCR1 = laser_delay_ticks;
+    LASER_TIMER.Instance->ARR = long_lsync_arr;     // First frame should be a dark frame with the delay
+    LASER_TIMER.Instance->CCR1 = long_lsync_ccr1;
 
     // Force register update
     FSYNC_TIMER.Instance->EGR |= TIM_EGR_UG;
@@ -281,7 +281,7 @@ void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     fsync_counter++;
     if (trigger_config.LaserPulseSkipInterval > 0) {
 
-		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0) {
+		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0 || (fsync_counter < NUM_DARK_FRAMES_AT_START )) {
             __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
             __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
             printf("Long LSYNC\r\n");

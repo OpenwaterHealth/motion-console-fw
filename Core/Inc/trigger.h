@@ -15,6 +15,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define NUM_DARK_FRAMES_AT_START 9
+
 typedef struct {
     uint32_t frequencyHz;        // Trigger frequency in Hz 1 - 100
     uint32_t triggerPulseWidthUsec;     // Pulse width in microseconds max determined by freq
