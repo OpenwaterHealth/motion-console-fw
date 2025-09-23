@@ -104,7 +104,6 @@ typedef enum {
 	OW_CTRL_TEC_STATUS = 0x1D,
 	OW_CTRL_READ_ADC = 0x1E,
 	OW_CTRL_READ_GPIO = 0x1F,
-	OW_CTRL_TEC_STATUS = 0x1D,
 } MotionControllerCommands;
 
 typedef enum {
