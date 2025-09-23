@@ -439,6 +439,12 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			last_lsync_count = get_lsync_pulse_count();
 			uartResp->data = (uint8_t *)&last_lsync_count;
 			break;
+		case OW_CTRL_TEC_STATUS:
+			uartResp->command = OW_CTRL_TEC_STATUS;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 1;
+			break;
 		default:
 			uartResp->data_len = 0;
 			uartResp->packet_type = OW_UNKNOWN;

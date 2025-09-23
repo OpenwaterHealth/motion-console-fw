@@ -392,22 +392,6 @@ int main(void)
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
 
-  HAL_Delay(1000);
-  uint16_t adc_result;
-  if (ADS7828_ReadChannel(&adc_mon[0], 0, &adc_result) == HAL_OK) {
-      float voltage = ADS7828_ConvertToVoltage(adc_result, 2.5f);
-      printf("Channel 0: %d (%.3f V)\r\n", adc_result, voltage);
-  } else {
-      printf("Error reading channel 0\r\n");
-  }
-
-  if (ADS7828_ReadChannel(&adc_mon[1], 6, &adc_result) == HAL_OK) {
-      float voltage = ADS7828_ConvertToVoltage(adc_result, 2.5f);
-      printf("Channel 6: %d (%.3f V)\r\n", adc_result, voltage);
-  } else {
-      printf("Error reading channel 0\r\n");
-  }
-
   /* USER CODE END 2 */
 
   /* Init scheduler */
