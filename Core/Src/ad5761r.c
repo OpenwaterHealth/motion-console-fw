@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 
+static bool ad5761r_enabled;
+
 // ---- Internal helpers ----
 static inline void cs_low(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_RESET); }
 static inline void cs_high(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_SET); }
@@ -695,6 +697,7 @@ HAL_StatusTypeDef ad5761r_software_full_reset(ad5761r_dev *dev)
  */
 HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
 {
+	ad5761r_enabled = false;
 	HAL_StatusTypeDef ret = HAL_ERROR;
 
     if (!dev || !dev->hspi) return HAL_ERROR;
@@ -702,7 +705,14 @@ HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
     ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
 	HAL_Delay(1);
 	ret |= ad5761r_config(dev);
-
+	if(ret == HAL_OK){
+		ad5761r_enabled = true;
+	}
 	return ret;
 
+}
+
+bool is_tec_enabled()
+{
+	return ad5761r_enabled;
 }

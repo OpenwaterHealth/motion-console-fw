@@ -199,6 +199,9 @@ HAL_StatusTypeDef ad5761r_software_data_reset(ad5761r_dev *dev);
 HAL_StatusTypeDef ad5761r_software_full_reset(ad5761r_dev *dev);
 uint16_t volts_to_code(const ad5761r_dev *dev, float v);
 
+/* TEC status check */
+bool is_tec_enabled(void);
+
 #ifdef __cplusplus
 }
 #endif
