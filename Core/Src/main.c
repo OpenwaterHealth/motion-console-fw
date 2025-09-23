@@ -30,7 +30,10 @@
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
+#include "ads7828.h"
+#include "ads7924.h"
 #include "fan_driver.h"
+#include "ad5761r.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -66,6 +69,8 @@ I2C_HandleTypeDef hi2c4;
 
 RNG_HandleTypeDef hrng;
 
+SPI_HandleTypeDef hspi1;
+
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
@@ -84,15 +89,19 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 3, 0};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 0};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
 
 // Declare handles for your two multiplexers
 extern TCA9548A_HandleTypeDef iic_mux[2];
+extern ADS7828_HandleTypeDef adc_mon[2];
+ADS7924_HandleTypeDef ads;
+extern bool ad5761r_enabled;
 extern FAN_Driver fan;
 
+ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
 
 
@@ -115,6 +124,7 @@ static void MX_TIM12_Init(void);
 static void MX_TIM15_Init(void);
 static void MX_I2C4_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_SPI1_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -177,7 +187,6 @@ void configure_pin_as_gpio_output(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin) {
 
 void delay_ms(uint32_t ms)
 {
-	printf("Clock: %ld\r\n", SystemCoreClock);
     uint32_t delay_cycles = (SystemCoreClock / 1000) * ms;
     while (delay_cycles--) {
         __NOP();  // Ensures the loop doesn't get optimized away
@@ -239,9 +248,12 @@ int main(void)
   MX_TIM15_Init();
   MX_I2C4_Init();
   MX_TIM2_Init();
+  MX_SPI1_Init();
   /* USER CODE BEGIN 2 */
 
   init_dma_logging();
+
+  DWT_Init();
 
   // HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
   // HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
@@ -250,14 +262,58 @@ int main(void)
 
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_RESET);
+
+
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_SET);
+
+  // setup PDU monitor
+  if((ADS7828_Init(&adc_mon[0], &hi2c2, 0x00) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[0], ADS7828_PD_ON_REF_ON) != HAL_OK))
+  {
+	  printf("Failed to initialize ADC0\r\n");
+  }
+  if((ADS7828_Init(&adc_mon[1], &hi2c2, 0x03) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[1], ADS7828_PD_ON_REF_ON) != HAL_OK))
+  {
+	  printf("Failed to initialize ADC0\r\n");
+  }
 
   printf("\033c");
   HAL_Delay(250);
   printf("Openwater open-MOTION Console FW v%d.%d.%d\r\n\r\n",FIRMWARE_VERSION_DATA[0], FIRMWARE_VERSION_DATA[1], FIRMWARE_VERSION_DATA[2]);
   printf("CPU Clock Frequency: %lu MHz\r\n", HAL_RCC_GetSysClockFreq() / 1000000);
   printf("Initializing, please wait ...\r\n");
+
+  // configure TEC DAC
+  printf("Initialize TEC DAC\r\n");
+  ad5761r_dev tec_dac = {
+	  .hspi = &hspi1,
+	  .cs_port=TECDAC_SS_GPIO_Port, .cs_pin=TECDAC_SS_Pin,
+	  .ldac_port=NULL, .ldac_pin=0,
+	  .clr_port=NULL,  .clr_pin=0,
+	  .rst_port=NULL,  .rst_pin=0,
+
+	  .type=AD5761R,
+	  .ra=AD5761R_RANGE_0V_TO_P_5V,
+	  .pv=AD5761R_SCALE_FULL,
+	  .cv=AD5761R_SCALE_FULL,
+	  .int_ref_en=true,
+	  .exc_temp_sd_en=true,
+	  .b2c_range_en=false,
+	  .ovr_en=false,
+	  .daisy_chain_en=false
+  };
+
+  if(ad5761r_init(&tec_dac) != HAL_OK){
+	  printf("Failed to initialize TEC DAC\r\n");
+  } else {
+	uint16_t reg_data = 0;
+    reg_data = volts_to_code(&tec_dac, 0.0f);
+    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)){
+		  printf("TEC DAC Failed to set DAC Voltage\r\n");
+		}else{
+		  printf("TEC DAC Initialized and set DAC Voltage\r\n");
+    }
+  }
 
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
@@ -282,18 +338,6 @@ int main(void)
 
   LED_RGB_SET(3); // Red
 
-#ifdef SCAN_DISPLAY
-  printf("I2C1\r\n");
-  I2C_scan(&hi2c1, NULL, 0, true);
-
-  printf("I2C2\r\n");
-  I2C_scan(&hi2c2, NULL, 0, true);
-
-  printf("I2C4\r\n");
-  I2C_scan(&hi2c4, NULL, 0, true);
-
-#endif
-
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
   {
@@ -303,20 +347,25 @@ int main(void)
 	  } else {
 		  printf("Initialized MUX%d\r\n", i+1);
 	      iic_mux[i].initialized = true;
-#ifdef SCAN_DISPLAY
-	      for(int x=0; x<8; x++){
-			if (TCA9548A_SelectChannel(i, x) != TCA9548A_OK) {
-				printf("error selecting channel %d\r\n", x);
-			} else {
-				printf("Scan MUX%d channel %d\r\n",i+1, x);
-				I2C_scan(iic_mux[i].hi2c, NULL, 0, true);
-			}
-		  }
-#endif
 	  }
 
   }
 
+#ifdef SCAN_DISPLAY
+  // printf("I2C1\r\n");
+  // I2C_scan(&hi2c1, NULL, 0, true);
+
+
+  TCA9548A_SelectChannel(1, 2); // scan eeprom and TEC ADC
+  printf("I2C2\r\n");
+  I2C_scan(&hi2c2, NULL, 0, true);
+
+  // printf("I2C4\r\n");
+  // I2C_scan(&hi2c4, NULL, 0, true);
+
+#endif
+
+  ADS7924_Init(&ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
   FAN_Init(&fan, &hi2c4, 0x2C);
 
   uint8_t fan_dev_id = FAN_ReadDeviceID(&fan);
@@ -332,6 +381,11 @@ int main(void)
 
 	  FAN_SetManualPWM(&fan, 10);
   }
+
+  // select GPIO expander channel
+  TCA9548A_SelectChannel(1, 0);
+  PCA9535APW_Init(&hi2c2);
+  PCA9535APW_WritePin(0, 7, 1); // shut led off
 
 
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
@@ -681,6 +735,54 @@ static void MX_RNG_Init(void)
 }
 
 /**
+  * @brief SPI1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI1_Init(void)
+{
+
+  /* USER CODE BEGIN SPI1_Init 0 */
+
+  /* USER CODE END SPI1_Init 0 */
+
+  /* USER CODE BEGIN SPI1_Init 1 */
+
+  /* USER CODE END SPI1_Init 1 */
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 0x0;
+  hspi1.Init.NSSPMode = SPI_NSS_PULSE_DISABLE;
+  hspi1.Init.NSSPolarity = SPI_NSS_POLARITY_LOW;
+  hspi1.Init.FifoThreshold = SPI_FIFO_THRESHOLD_01DATA;
+  hspi1.Init.TxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
+  hspi1.Init.RxCRCInitializationPattern = SPI_CRC_INITIALIZATION_ALL_ZERO_PATTERN;
+  hspi1.Init.MasterSSIdleness = SPI_MASTER_SS_IDLENESS_00CYCLE;
+  hspi1.Init.MasterInterDataIdleness = SPI_MASTER_INTERDATA_IDLENESS_00CYCLE;
+  hspi1.Init.MasterReceiverAutoSusp = SPI_MASTER_RX_AUTOSUSP_DISABLE;
+  hspi1.Init.MasterKeepIOState = SPI_MASTER_KEEP_IO_STATE_DISABLE;
+  hspi1.Init.IOSwap = SPI_IO_SWAP_DISABLE;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI1_Init 2 */
+
+  /* USER CODE END SPI1_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -694,7 +796,6 @@ static void MX_TIM1_Init(void)
 
   TIM_ClockConfigTypeDef sClockSourceConfig = {0};
   TIM_MasterConfigTypeDef sMasterConfig = {0};
-  TIM_IC_InitTypeDef sConfigIC = {0};
 
   /* USER CODE BEGIN TIM1_Init 1 */
 
@@ -715,22 +816,10 @@ static void MX_TIM1_Init(void)
   {
     Error_Handler();
   }
-  if (HAL_TIM_IC_Init(&htim1) != HAL_OK)
-  {
-    Error_Handler();
-  }
   sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
   sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim1, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sConfigIC.ICPolarity = TIM_INPUTCHANNELPOLARITY_RISING;
-  sConfigIC.ICSelection = TIM_ICSELECTION_DIRECTTI;
-  sConfigIC.ICPrescaler = TIM_ICPSC_DIV1;
-  sConfigIC.ICFilter = 0;
-  if (HAL_TIM_IC_ConfigChannel(&htim1, &sConfigIC, TIM_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -1055,7 +1144,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOC, HUB_RESET_Pin|SDA_REM_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|TECDAC_SS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, SYS_EN_Pin|LED_ON_Pin, GPIO_PIN_RESET);
@@ -1076,12 +1165,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : nTRIG_Pin */
-  GPIO_InitStruct.Pin = nTRIG_Pin;
+  /*Configure GPIO pins : nTRIG_Pin TECDAC_SS_Pin */
+  GPIO_InitStruct.Pin = nTRIG_Pin|TECDAC_SS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(nTRIG_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : SYS_EN_Pin LED_ON_Pin */
   GPIO_InitStruct.Pin = SYS_EN_Pin|LED_ON_Pin;
@@ -1097,14 +1186,18 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SP_GPIO2_Pin FULL_ON_n_Pin SP_GPIO1_Pin */
-  GPIO_InitStruct.Pin = SP_GPIO2_Pin|FULL_ON_n_Pin|SP_GPIO1_Pin;
+  /*Configure GPIO pins : SP_GPIO2_Pin SYNC_OUT_Pin SYNC_IN_Pin FULL_ON_n_Pin
+                           SP_GPIO1_Pin */
+  GPIO_InitStruct.Pin = SP_GPIO2_Pin|SYNC_OUT_Pin|SYNC_IN_Pin|FULL_ON_n_Pin
+                          |SP_GPIO1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : FAN_TOP_GD2_Pin MCU_GPIO1_Pin POWER_DETECT_Pin */
-  GPIO_InitStruct.Pin = FAN_TOP_GD2_Pin|MCU_GPIO1_Pin|POWER_DETECT_Pin;
+  /*Configure GPIO pins : FAN_TOP_GD2_Pin MCU_GPIO1_Pin TEMPGD_Pin BRD_V2_Pin
+                           POWER_DETECT_Pin BRD_V0_Pin */
+  GPIO_InitStruct.Pin = FAN_TOP_GD2_Pin|MCU_GPIO1_Pin|TEMPGD_Pin|BRD_V2_Pin
+                          |POWER_DETECT_Pin|BRD_V0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
@@ -1116,11 +1209,23 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : FAN_TOP_GD1_Pin SP_GPIO3_Pin SYNC_IN_Pin SYNC_OUT_Pin */
-  GPIO_InitStruct.Pin = FAN_TOP_GD1_Pin|SP_GPIO3_Pin|SYNC_IN_Pin|SYNC_OUT_Pin;
+  /*Configure GPIO pins : FAN_TOP_GD1_Pin SP_GPIO3_Pin */
+  GPIO_InitStruct.Pin = FAN_TOP_GD1_Pin|SP_GPIO3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : EE_INT_Pin OPT_INT_Pin */
+  GPIO_InitStruct.Pin = EE_INT_Pin|OPT_INT_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : BRD_V1_Pin */
+  GPIO_InitStruct.Pin = BRD_V1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(BRD_V1_GPIO_Port, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
@@ -1176,9 +1281,10 @@ void StartDefaultTask(void *argument)
   /* USER CODE BEGIN 5 */
   printf("USB started\r\n");
   /* Infinite loop */
+
   for(;;)
   {
-	osDelay(250);
+	osDelay(5000);
   }
   /* USER CODE END 5 */
 }

@@ -11,14 +11,16 @@
 #include "FreeRTOS.h"
 #include "semphr.h"
 #include "task.h"
-#include <string.h>
 #include "usbd_cdc_if.h"
 #include "cmsis_os.h"
 #include "tca9548a.h"
 #include "trigger.h"
 #include "fan_driver.h"
 #include "ads7828.h"
+#include "ad5761r.h"
 #include "led_driver.h"
+
+#include <string.h>
 
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
@@ -437,6 +439,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->data_len = 4;
 			last_lsync_count = get_lsync_pulse_count();
 			uartResp->data = (uint8_t *)&last_lsync_count;
+			break;
+		case OW_CTRL_TEC_STATUS:
+			uartResp->command = OW_CTRL_TEC_STATUS;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 1;
+			*uartResp->data = (uint8_t) is_tec_enabled();
 			break;
 		default:
 			uartResp->data_len = 0;

@@ -101,6 +101,10 @@ typedef enum {
 	OW_CTRL_I2C_WR = 0x1A,
 	OW_CTRL_GET_FSYNC = 0x1B,
 	OW_CTRL_GET_LSYNC = 0x1C,
+	OW_CTRL_TEC_STATUS = 0x1D,
+	OW_CTRL_READ_ADC = 0x1E,
+	OW_CTRL_READ_GPIO = 0x1F,
+	OW_CTRL_TEC_STATUS = 0x1D,
 } MotionControllerCommands;
 
 typedef enum {
