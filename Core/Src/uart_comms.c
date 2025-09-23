@@ -17,6 +17,7 @@
 #include "trigger.h"
 #include "fan_driver.h"
 #include "ads7828.h"
+#include "ad5761r.h"
 #include "led_driver.h"
 
 #include <string.h>
@@ -444,6 +445,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 1;
+			*uartResp->data = (uint8_t) is_tec_enabled();
 			break;
 		default:
 			uartResp->data_len = 0;

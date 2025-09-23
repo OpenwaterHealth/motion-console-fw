@@ -98,7 +98,7 @@ uint8_t txBuffer[COMMAND_MAX_SIZE];
 extern TCA9548A_HandleTypeDef iic_mux[2];
 extern ADS7828_HandleTypeDef adc_mon[2];
 ADS7924_HandleTypeDef ads;
-
+extern bool ad5761r_enabled;
 extern FAN_Driver fan;
 
 ad5761r_dev tec_dac;
@@ -307,7 +307,7 @@ int main(void)
 	  printf("Failed to initialize TEC DAC\r\n");
   } else {
 	uint16_t reg_data = 0;
-    reg_data = volts_to_code(&tec_dac, 0.5f);
+    reg_data = volts_to_code(&tec_dac, 0.0f);
     if(ad5761r_write_update_dac_register(&tec_dac, reg_data)){
 		  printf("TEC DAC Failed to set DAC Voltage\r\n");
 		}else{
