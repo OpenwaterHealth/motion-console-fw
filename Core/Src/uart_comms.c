@@ -38,6 +38,8 @@ extern FAN_Driver fan;
 extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
+extern ad5761r_dev tec_dac;
+
 static uint8_t last_fan_speed = 0;
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
@@ -46,6 +48,7 @@ static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
 
 static char retTriggerJson[0xFF];
+static float tec_setpoint = 0.0;
 
 static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd);
 
@@ -440,12 +443,54 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			last_lsync_count = get_lsync_pulse_count();
 			uartResp->data = (uint8_t *)&last_lsync_count;
 			break;
-		case OW_CTRL_TEC_STATUS:
-			uartResp->command = OW_CTRL_TEC_STATUS;
+		case OW_CTRL_TEC_DAC:
+			uartResp->command = OW_CTRL_TEC_DAC;
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 1;
-			*uartResp->data = (uint8_t) is_tec_enabled();
+			if(cmd->reserved == 0){
+				// get voltage setpoint
+				uint16_t reg_data = 0;
+				if(ad5761r_register_readback(&tec_dac, CMD_RD_DAC_REG, &reg_data) == HAL_OK)
+				{
+					float temp_val = 0;
+					printf("Read DAC: 0x%04X\r\n", reg_data);
+					temp_val = code_to_volts(&tec_dac, reg_data);
+			        printf("Get DAC to: %f Byte Size: %d\r\n", temp_val, sizeof(float));
+					uartResp->data = (uint8_t *)&temp_val;
+			        uartResp->data_len   = sizeof(float);   // 4
+
+				}else{
+				  uartResp->data_len = 0;
+				  uartResp->data = NULL;
+				  uartResp->packet_type = OW_ERROR;
+				}
+			}
+			else if(cmd->reserved == 1 && cmd->data_len == 4){
+				// set voltage setpoint
+		        float set_voltage;
+		        memcpy(&set_voltage, cmd->data, sizeof(float));
+		        printf("Set DAC to: %f\r\n", set_voltage);
+				uint16_t reg_data = 0;
+			    reg_data = volts_to_code(&tec_dac, set_voltage);
+		        printf("Set DAC to: 0x%04X\r\n", reg_data);
+	            uartResp->data_len    = 4;  // ACK with empty payload
+				uartResp->data = (uint8_t *)&tec_setpoint;
+			    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)!=0){
+				  printf("TEC DAC Failed to set DAC Voltage\r\n");
+				  uartResp->data_len = 0;
+				  uartResp->data = NULL;
+				  uartResp->packet_type = OW_ERROR;
+				}else{
+		            tec_setpoint       = set_voltage;  // remember last setpoint
+		            uartResp->data_len    = 4;  // ACK with empty payload
+					uartResp->data = (uint8_t *)&tec_setpoint;
+				}
+			}else{
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+				uartResp->packet_type = OW_UNKNOWN;
+			}
+
 			break;
 		default:
 			uartResp->data_len = 0;

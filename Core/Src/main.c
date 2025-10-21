@@ -89,7 +89,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 0};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 1};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -285,33 +285,38 @@ int main(void)
 
   // configure TEC DAC
   printf("Initialize TEC DAC\r\n");
-  ad5761r_dev tec_dac = {
-	  .hspi = &hspi1,
-	  .cs_port=TECDAC_SS_GPIO_Port, .cs_pin=TECDAC_SS_Pin,
-	  .ldac_port=NULL, .ldac_pin=0,
-	  .clr_port=NULL,  .clr_pin=0,
-	  .rst_port=NULL,  .rst_pin=0,
-
-	  .type=AD5761R,
-	  .ra=AD5761R_RANGE_0V_TO_P_5V,
-	  .pv=AD5761R_SCALE_FULL,
-	  .cv=AD5761R_SCALE_FULL,
-	  .int_ref_en=true,
-	  .exc_temp_sd_en=true,
-	  .b2c_range_en=false,
-	  .ovr_en=false,
-	  .daisy_chain_en=false
-  };
+  tec_dac.hspi = &hspi1;
+  tec_dac.cs_port = TECDAC_SS_GPIO_Port;
+  tec_dac.cs_pin = TECDAC_SS_Pin;
+  tec_dac.ldac_port=NULL;
+  tec_dac.ldac_pin=0;
+  tec_dac.clr_port=NULL;
+  tec_dac.clr_pin=0;
+  tec_dac.rst_port=NULL;
+  tec_dac.rst_pin=0;
+  tec_dac.type=AD5761R,
+  tec_dac.ra=AD5761R_RANGE_0V_TO_P_5V;
+  tec_dac.pv=AD5761R_SCALE_FULL;
+  tec_dac.cv=AD5761R_SCALE_FULL;
+  tec_dac.int_ref_en=true;
+  tec_dac.exc_temp_sd_en=true;
+  tec_dac.b2c_range_en=false;
+  tec_dac.ovr_en=false;
+  tec_dac.daisy_chain_en=false;
 
   if(ad5761r_init(&tec_dac) != HAL_OK){
 	  printf("Failed to initialize TEC DAC\r\n");
   } else {
-	uint16_t reg_data = 0;
-    reg_data = volts_to_code(&tec_dac, 0.0f);
-    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)){
-		  printf("TEC DAC Failed to set DAC Voltage\r\n");
-		}else{
-		  printf("TEC DAC Initialized and set DAC Voltage\r\n");
+	uint16_t val = 0;
+	val = volts_to_code(&tec_dac, 0.0f);
+	printf("Set DAC VAL: 0x%04X\r\n", val);
+    if(ad5761r_write_update_dac_register(&tec_dac, val)){
+		printf("TEC DAC Failed to set DAC Voltage\r\n");
+	}else{
+		uint16_t reg_data = 0;
+		printf("TEC DAC Initialized and set DAC Voltage\r\n");
+		ad5761r_read(&tec_dac, CMD_RD_DAC_REG, &reg_data);
+		printf("Read DAC Data 0x%04X\r\n", reg_data);
     }
   }
 
@@ -757,7 +762,7 @@ static void MX_SPI1_Init(void)
   hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
   hspi1.Init.CLKPhase = SPI_PHASE_2EDGE;
   hspi1.Init.NSS = SPI_NSS_SOFT;
-  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_32;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
   hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
   hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
   hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
