@@ -56,7 +56,7 @@ static uint32_t last_lsync_count = 0;
 
 static float tecadc_last_volts[4];
 static uint16_t tecadc_last_raw[4];
-
+static uint8_t tec_temp_good;
 static char retTriggerJson[0xFF];
 static float tec_setpoint = 0.0;
 
@@ -520,6 +520,15 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->data_len    = sizeof(consoleTemps.bytes);;  // ACK with empty payload
 			uartResp->data = consoleTemps.bytes;
 
+			break;
+		case OW_CTRL_TEC_STATUS:
+			uartResp->command = OW_CTRL_TECADC;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+
+			tec_temp_good = HAL_GPIO_ReadPin(TEMPGD_GPIO_Port, TEMPGD_Pin);
+			uartResp->data_len = 1;
+			uartResp->data = &tec_temp_good;
 			break;
 		case OW_CTRL_TECADC:
 			uartResp->command = OW_CTRL_TECADC;
