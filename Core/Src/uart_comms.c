@@ -54,7 +54,8 @@ static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
 
-static float tecadc_last_volts;
+static float tecadc_last_volts[4];
+static uint16_t tecadc_last_raw[4];
 
 static char retTriggerJson[0xFF];
 static float tec_setpoint = 0.0;
@@ -524,19 +525,36 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->command = OW_CTRL_TECADC;
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
-			if(uartResp->reserved>3){
+			if(uartResp->reserved>4){
 				uartResp->data_len = 0;
 				uartResp->packet_type = OW_UNKNOWN;
 			}else{
-				tecadc_last_volts = 0;
-				if(ADS7924_ReadVoltage(&tec_ads, uartResp->reserved, &tecadc_last_volts, 100) != ADS7924_OK)
+				memset(tecadc_last_volts, 0, 16);
+				if(cmd->reserved == 4)
+				{
+					if(ADS7924_ReadAllRaw(&tec_ads, tecadc_last_raw, 100) != ADS7924_OK)
+					{
+					  printf("Failed to read ADC channels\r\n");
+					  uartResp->data_len = 0;
+					  uartResp->packet_type = OW_UNKNOWN;
+					}else{
+					  for(int i=0; i < 4; i++){
+						  tecadc_last_volts[i] = ADS7924_CodeToVolts(&tec_ads, tecadc_last_raw[i]);
+					  }
+			          uartResp->data_len = 16;
+			          uartResp->data = (uint8_t *)tecadc_last_volts;
+					}
+					break;
+				}
+
+				if(ADS7924_ReadVoltage(&tec_ads, uartResp->reserved, &tecadc_last_volts[uartResp->reserved], 100) != ADS7924_OK)
 				{
 				  printf("Failed to read ADC channel %d\r\n", uartResp->reserved);
 				  uartResp->data_len = 0;
 				  uartResp->packet_type = OW_UNKNOWN;
 				}else{
 		          uartResp->data_len = 4;
-		          uartResp->data = (uint8_t *)&tecadc_last_volts;
+		          uartResp->data = (uint8_t *)&tecadc_last_volts[uartResp->reserved];
 				}
 			}
 			break;
