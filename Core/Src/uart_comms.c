@@ -18,6 +18,7 @@
 #include "fan_driver.h"
 #include "ads7828.h"
 #include "ad5761r.h"
+#include "max31875.h"
 #include "led_driver.h"
 
 #include <string.h>
@@ -29,6 +30,10 @@ extern uint8_t txBuffer[COMMAND_MAX_SIZE];
 volatile uint32_t ptrReceive;
 volatile uint8_t rx_flag = 0;
 volatile uint8_t tx_flag = 0;
+
+
+static ConsoleTemperatures consoleTemps;
+
 
 SemaphoreHandle_t uartTxSemaphore;
 SemaphoreHandle_t xRxSemaphore;
@@ -233,6 +238,9 @@ NextDataPacket:
 void comms_init() {
 	printf("Initilize comms task\r\n");
 
+	consoleTemps.f.t1 = 0;
+	consoleTemps.f.t2 = 0;
+	consoleTemps.f.t3 = 0;
 
     uartTxSemaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(uartTxSemaphore); // Initially available for transmission
@@ -490,6 +498,26 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				uartResp->data = NULL;
 				uartResp->packet_type = OW_UNKNOWN;
 			}
+
+			break;
+		case OW_CTRL_GET_TEMPS:
+			uartResp->command = OW_CTRL_GET_TEMPS;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+
+			TCA9548A_SelectChannel(1, 1); // temp sensors
+
+			// last_temperature1 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
+			consoleTemps.f.t1 = MAX31875_ReadTemperature(MAX31875_TEMP1_DEV_ADDR);
+
+			// last_temperature2 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
+			consoleTemps.f.t2 = MAX31875_ReadTemperature(MAX31875_TEMP2_DEV_ADDR);
+
+			// last_temperature3 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
+			consoleTemps.f.t3 = MAX31875_ReadTemperature(MAX31875_TEMP3_DEV_ADDR);
+
+            uartResp->data_len    = sizeof(consoleTemps.bytes);;  // ACK with empty payload
+			uartResp->data = consoleTemps.bytes;
 
 			break;
 		default:

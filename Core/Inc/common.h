@@ -104,6 +104,7 @@ typedef enum {
 	OW_CTRL_TEC_DAC = 0x1D,
 	OW_CTRL_READ_ADC = 0x1E,
 	OW_CTRL_READ_GPIO = 0x1F,
+	OW_CTRL_GET_TEMPS = 0x20,
 } MotionControllerCommands;
 
 typedef enum {
@@ -135,6 +136,15 @@ typedef struct  {
 	uint8_t* data;
 	uint16_t crc;
 } UartPacket;
+
+typedef union {
+    struct __attribute__((packed)) {
+        float t1;
+        float t2;
+        float t3;
+    } f;
+    uint8_t bytes[12];
+} ConsoleTemperatures;
 
 _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd);
 
