@@ -18,6 +18,7 @@
 #include "fan_driver.h"
 #include "ads7828.h"
 #include "ad5761r.h"
+#include "ads7924.h"
 #include "max31875.h"
 #include "led_driver.h"
 
@@ -26,6 +27,7 @@
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
 extern uint8_t txBuffer[COMMAND_MAX_SIZE];
+extern ADS7924_HandleTypeDef tec_ads;
 
 volatile uint32_t ptrReceive;
 volatile uint8_t rx_flag = 0;
@@ -51,6 +53,8 @@ static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
+
+static float tecadc_last_volts;
 
 static char retTriggerJson[0xFF];
 static float tec_setpoint = 0.0;
@@ -461,9 +465,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				if(ad5761r_register_readback(&tec_dac, CMD_RD_DAC_REG, &reg_data) == HAL_OK)
 				{
 					float temp_val = 0;
-					printf("Read DAC: 0x%04X\r\n", reg_data);
 					temp_val = code_to_volts(&tec_dac, reg_data);
-			        printf("Get DAC to: %f Byte Size: %d\r\n", temp_val, sizeof(float));
 					uartResp->data = (uint8_t *)&temp_val;
 			        uartResp->data_len   = sizeof(float);   // 4
 
@@ -477,10 +479,8 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 				// set voltage setpoint
 		        float set_voltage;
 		        memcpy(&set_voltage, cmd->data, sizeof(float));
-		        printf("Set DAC to: %f\r\n", set_voltage);
 				uint16_t reg_data = 0;
 			    reg_data = volts_to_code(&tec_dac, set_voltage);
-		        printf("Set DAC to: 0x%04X\r\n", reg_data);
 	            uartResp->data_len    = 4;  // ACK with empty payload
 				uartResp->data = (uint8_t *)&tec_setpoint;
 			    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)!=0){
@@ -519,6 +519,26 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->data_len    = sizeof(consoleTemps.bytes);;  // ACK with empty payload
 			uartResp->data = consoleTemps.bytes;
 
+			break;
+		case OW_CTRL_TECADC:
+			uartResp->command = OW_CTRL_TECADC;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			if(uartResp->reserved>3){
+				uartResp->data_len = 0;
+				uartResp->packet_type = OW_UNKNOWN;
+			}else{
+				tecadc_last_volts = 0;
+				if(ADS7924_ReadVoltage(&tec_ads, uartResp->reserved, &tecadc_last_volts, 100) != ADS7924_OK)
+				{
+				  printf("Failed to read ADC channel %d\r\n", uartResp->reserved);
+				  uartResp->data_len = 0;
+				  uartResp->packet_type = OW_UNKNOWN;
+				}else{
+		          uartResp->data_len = 4;
+		          uartResp->data = (uint8_t *)&tecadc_last_volts;
+				}
+			}
 			break;
 		default:
 			uartResp->data_len = 0;

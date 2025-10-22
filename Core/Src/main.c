@@ -97,7 +97,7 @@ uint8_t txBuffer[COMMAND_MAX_SIZE];
 // Declare handles for your two multiplexers
 extern TCA9548A_HandleTypeDef iic_mux[2];
 extern ADS7828_HandleTypeDef adc_mon[2];
-ADS7924_HandleTypeDef ads;
+ADS7924_HandleTypeDef tec_ads;
 extern bool ad5761r_enabled;
 extern FAN_Driver fan;
 
@@ -309,14 +309,10 @@ int main(void)
   } else {
 	uint16_t val = 0;
 	val = volts_to_code(&tec_dac, 0.0f);
-	printf("Set DAC VAL: 0x%04X\r\n", val);
     if(ad5761r_write_update_dac_register(&tec_dac, val)){
 		printf("TEC DAC Failed to set DAC Voltage\r\n");
 	}else{
-		uint16_t reg_data = 0;
 		printf("TEC DAC Initialized and set DAC Voltage\r\n");
-		ad5761r_read(&tec_dac, CMD_RD_DAC_REG, &reg_data);
-		printf("Read DAC Data 0x%04X\r\n", reg_data);
     }
   }
 
@@ -361,8 +357,8 @@ int main(void)
   // I2C_scan(&hi2c1, NULL, 0, true);
 
 
-  // TCA9548A_SelectChannel(1, 2); // scan eeprom and TEC ADC
-  TCA9548A_SelectChannel(1, 1); // scan temp sensors
+  TCA9548A_SelectChannel(1, 2); // scan eeprom and TEC ADC
+  // TCA9548A_SelectChannel(1, 1); // scan temp sensors
   printf("I2C2\r\n");
   I2C_scan(&hi2c2, NULL, 0, true);
 
@@ -371,7 +367,8 @@ int main(void)
 
 #endif
 
-  ADS7924_Init(&ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
+  ADS7924_Init(&tec_ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
+  
   FAN_Init(&fan, &hi2c4, 0x2C);
 
   uint8_t fan_dev_id = FAN_ReadDeviceID(&fan);
@@ -392,7 +389,6 @@ int main(void)
   TCA9548A_SelectChannel(1, 0);
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
-
 
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
