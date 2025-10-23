@@ -13,9 +13,11 @@
 #include <string.h>
 
 /* Define Device Address */
-#define MAX31875_TEMP1_DEV_ADDR 				0x48			// slave address
+#define MAX31875_TEMP1_DEV_ADDR 				0x49			// slave address MCU
 
-#define MAX31875_TEMP2_DEV_ADDR 				0x49			// slave address
+#define MAX31875_TEMP2_DEV_ADDR 				0x4A			// slave address SAFETY FPGA
+
+#define MAX31875_TEMP3_DEV_ADDR 				0x4B			// slave address TA FPGA
 
 /* Define registers address */
 #define MAX31875_TEMP_REG_ADDR 				0x00			// temperature register address

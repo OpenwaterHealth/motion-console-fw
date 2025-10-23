@@ -18,6 +18,8 @@
 #include "fan_driver.h"
 #include "ads7828.h"
 #include "ad5761r.h"
+#include "ads7924.h"
+#include "max31875.h"
 #include "led_driver.h"
 
 #include <string.h>
@@ -25,10 +27,15 @@
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
 extern uint8_t txBuffer[COMMAND_MAX_SIZE];
+extern ADS7924_HandleTypeDef tec_ads;
 
 volatile uint32_t ptrReceive;
 volatile uint8_t rx_flag = 0;
 volatile uint8_t tx_flag = 0;
+
+
+static ConsoleTemperatures consoleTemps;
+
 
 SemaphoreHandle_t uartTxSemaphore;
 SemaphoreHandle_t xRxSemaphore;
@@ -38,6 +45,8 @@ extern FAN_Driver fan;
 extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
+extern ad5761r_dev tec_dac;
+
 static uint8_t last_fan_speed = 0;
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
@@ -45,7 +54,11 @@ static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
 
+static float tecadc_last_volts[4];
+static uint16_t tecadc_last_raw[4];
+static uint8_t tec_temp_good;
 static char retTriggerJson[0xFF];
+static float tec_setpoint = 0.0;
 
 static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd);
 
@@ -230,6 +243,9 @@ NextDataPacket:
 void comms_init() {
 	printf("Initilize comms task\r\n");
 
+	consoleTemps.f.t1 = 0;
+	consoleTemps.f.t2 = 0;
+	consoleTemps.f.t3 = 0;
 
     uartTxSemaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(uartTxSemaphore); // Initially available for transmission
@@ -440,12 +456,116 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			last_lsync_count = get_lsync_pulse_count();
 			uartResp->data = (uint8_t *)&last_lsync_count;
 			break;
-		case OW_CTRL_TEC_STATUS:
-			uartResp->command = OW_CTRL_TEC_STATUS;
+		case OW_CTRL_TEC_DAC:
+			uartResp->command = OW_CTRL_TEC_DAC;
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
+			if(cmd->reserved == 0){
+				// get voltage setpoint
+				uint16_t reg_data = 0;
+				if(ad5761r_register_readback(&tec_dac, CMD_RD_DAC_REG, &reg_data) == HAL_OK)
+				{
+					float temp_val = 0;
+					temp_val = code_to_volts(&tec_dac, reg_data);
+					uartResp->data = (uint8_t *)&temp_val;
+			        uartResp->data_len   = sizeof(float);   // 4
+
+				}else{
+				  uartResp->data_len = 0;
+				  uartResp->data = NULL;
+				  uartResp->packet_type = OW_ERROR;
+				}
+			}
+			else if(cmd->reserved == 1 && cmd->data_len == 4){
+				// set voltage setpoint
+		        float set_voltage;
+		        memcpy(&set_voltage, cmd->data, sizeof(float));
+				uint16_t reg_data = 0;
+			    reg_data = volts_to_code(&tec_dac, set_voltage);
+	            uartResp->data_len    = 4;  // ACK with empty payload
+				uartResp->data = (uint8_t *)&tec_setpoint;
+			    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)!=0){
+				  printf("TEC DAC Failed to set DAC Voltage\r\n");
+				  uartResp->data_len = 0;
+				  uartResp->data = NULL;
+				  uartResp->packet_type = OW_ERROR;
+				}else{
+		            tec_setpoint       = set_voltage;  // remember last setpoint
+		            uartResp->data_len    = 4;  // ACK with empty payload
+					uartResp->data = (uint8_t *)&tec_setpoint;
+				}
+			}else{
+				uartResp->data_len = 0;
+				uartResp->data = NULL;
+				uartResp->packet_type = OW_UNKNOWN;
+			}
+
+			break;
+		case OW_CTRL_GET_TEMPS:
+			uartResp->command = OW_CTRL_GET_TEMPS;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+
+			TCA9548A_SelectChannel(1, 1); // temp sensors
+
+			// last_temperature1 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
+			consoleTemps.f.t1 = MAX31875_ReadTemperature(MAX31875_TEMP1_DEV_ADDR);
+
+			// last_temperature2 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
+			consoleTemps.f.t2 = MAX31875_ReadTemperature(MAX31875_TEMP2_DEV_ADDR);
+
+			// last_temperature3 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
+			consoleTemps.f.t3 = MAX31875_ReadTemperature(MAX31875_TEMP3_DEV_ADDR);
+
+            uartResp->data_len    = sizeof(consoleTemps.bytes);;  // ACK with empty payload
+			uartResp->data = consoleTemps.bytes;
+
+			break;
+		case OW_CTRL_TEC_STATUS:
+			uartResp->command = OW_CTRL_TECADC;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+
+			tec_temp_good = HAL_GPIO_ReadPin(TEMPGD_GPIO_Port, TEMPGD_Pin);
 			uartResp->data_len = 1;
-			*uartResp->data = (uint8_t) is_tec_enabled();
+			uartResp->data = &tec_temp_good;
+			break;
+		case OW_CTRL_TECADC:
+			uartResp->command = OW_CTRL_TECADC;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			if(uartResp->reserved>4){
+				uartResp->data_len = 0;
+				uartResp->packet_type = OW_UNKNOWN;
+			}else{
+				memset(tecadc_last_volts, 0, 16);
+				if(cmd->reserved == 4)
+				{
+					if(ADS7924_ReadAllRaw(&tec_ads, tecadc_last_raw, 100) != ADS7924_OK)
+					{
+					  printf("Failed to read ADC channels\r\n");
+					  uartResp->data_len = 0;
+					  uartResp->packet_type = OW_UNKNOWN;
+					}else{
+					  for(int i=0; i < 4; i++){
+						  tecadc_last_volts[i] = ADS7924_CodeToVolts(&tec_ads, tecadc_last_raw[i]);
+					  }
+			          uartResp->data_len = 16;
+			          uartResp->data = (uint8_t *)tecadc_last_volts;
+					}
+					break;
+				}
+
+				if(ADS7924_ReadVoltage(&tec_ads, uartResp->reserved, &tecadc_last_volts[uartResp->reserved], 100) != ADS7924_OK)
+				{
+				  printf("Failed to read ADC channel %d\r\n", uartResp->reserved);
+				  uartResp->data_len = 0;
+				  uartResp->packet_type = OW_UNKNOWN;
+				}else{
+		          uartResp->data_len = 4;
+		          uartResp->data = (uint8_t *)&tecadc_last_volts[uartResp->reserved];
+				}
+			}
 			break;
 		default:
 			uartResp->data_len = 0;

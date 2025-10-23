@@ -2,8 +2,6 @@
 
 #include <stdio.h>
 
-static bool ad5761r_enabled;
-
 // ---- Internal helpers ----
 static inline void cs_low(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_RESET); }
 static inline void cs_high(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_SET); }
@@ -16,6 +14,63 @@ static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef* port, uint16_t pin) {
     return 0;
 }
 
+#include <stdint.h>
+#include <limits.h> // INT16_MIN
+
+// convert 16bit code to volts for chosen span
+float code_to_volts(const ad5761r_dev *dev, uint16_t code)
+{
+  // Base span from range
+  float vmin = 0.f, vmax = 5.f; // default
+  switch (dev->ra) {
+    case AD5761R_RANGE_M_10V_TO_P_10V: vmin = -10.f; vmax = +10.f; break;
+    case AD5761R_RANGE_0_V_TO_P_10V:   vmin =   0.f; vmax = +10.f; break;
+    case AD5761R_RANGE_M_5V_TO_P_5V:   vmin =  -5.f; vmax =  +5.f; break;
+    case AD5761R_RANGE_0V_TO_P_5V:     vmin =   0.f; vmax =  +5.f; break;
+    case AD5761R_RANGE_M_2V5_TO_P_7V5: vmin = -2.5f; vmax = +7.5f; break;
+    case AD5761R_RANGE_M_3V_TO_P_3V:   vmin =  -3.f; vmax =  +3.f; break;
+    case AD5761R_RANGE_0V_TO_P_16V:    vmin =   0.f; vmax = +16.f; break;
+    case AD5761R_RANGE_0V_TO_P_20V:    vmin =   0.f; vmax = +20.f; break;
+    default: break;
+  }
+
+  // Apply optional 5% overrange (same as encoder)
+  if (dev->ovr_en) {
+    float span = (vmax - vmin);
+    vmin -= 0.05f * span * 0.5f;
+    vmax += 0.05f * span * 0.5f;
+  }
+
+  const float span = (vmax - vmin);
+
+  // Unipolar or bipolar straight/offset-binary
+  if (vmin >= 0.f || !dev->b2c_range_en) {
+    // Straight/offset binary (both use same linear map)
+    // code 0..65535 -> v in [vmin, vmax]
+    float v = vmin + ( (float)code * (span / 65535.0f) );
+    // Clamp to nominal range just in case
+    if (v < vmin) v = vmin;
+    if (v > vmax) v = vmax;
+    return v;
+  } else {
+    // Bipolar two's complement (B2C)
+    // reinterpret as signed and scale: ±FS -> ±32767
+    int16_t s = (int16_t)code;
+    if (s == INT16_MIN) {
+      // Map exactly to negative full-scale endpoint
+      return vmin;
+    }
+    float v = ((float)s) * ((span / 2.0f) / 32767.0f);
+    // v currently in [-(span/2), +(span/2)] relative to 0 V
+    // Shift to absolute by noting midpoint is 0 V
+    // Since vmin = -span/2 and vmax = +span/2 in bipolar ranges:
+    // final volts = v
+    // But for consistency with vmin/vmax variables, just clamp:
+    if (v < vmin) v = vmin;
+    if (v > vmax) v = vmax;
+    return v;
+  }
+}
 
 // Convert volts to 16-bit code for chosen span; clamps to range
 uint16_t volts_to_code(const ad5761r_dev *dev, float v)
@@ -697,7 +752,6 @@ HAL_StatusTypeDef ad5761r_software_full_reset(ad5761r_dev *dev)
  */
 HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
 {
-	ad5761r_enabled = false;
 	HAL_StatusTypeDef ret = HAL_ERROR;
 
     if (!dev || !dev->hspi) return HAL_ERROR;
@@ -705,14 +759,7 @@ HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
     ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
 	HAL_Delay(1);
 	ret |= ad5761r_config(dev);
-	if(ret == HAL_OK){
-		ad5761r_enabled = true;
-	}
+
 	return ret;
 
-}
-
-bool is_tec_enabled()
-{
-	return ad5761r_enabled;
 }
