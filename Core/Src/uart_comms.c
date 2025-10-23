@@ -526,7 +526,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->addr = cmd->addr;
 			uartResp->reserved = cmd->reserved;
 
-			tec_temp_good = HAL_GPIO_ReadPin(TEMPGD_GPIO_Port, TEMPGD_Pin);
+			tec_temp_good = HAL_GPIO_ReadPin(TEMPGD_GPIO_Port, TEMPGD_Pin)?0:1;   // active low
 			uartResp->data_len = 1;
 			uartResp->data = &tec_temp_good;
 			break;
