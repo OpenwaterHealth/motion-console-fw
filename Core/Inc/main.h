@@ -65,6 +65,8 @@ void Error_Handler(void);
 #define nTRIG_GPIO_Port GPIOE
 #define SYS_EN_Pin GPIO_PIN_9
 #define SYS_EN_GPIO_Port GPIOB
+#define EE_CS_Pin GPIO_PIN_15
+#define EE_CS_GPIO_Port GPIOA
 #define TECDAC_SS_Pin GPIO_PIN_3
 #define TECDAC_SS_GPIO_Port GPIOE
 #define LED_ON_Pin GPIO_PIN_8
@@ -73,6 +75,8 @@ void Error_Handler(void);
 #define IND3_GPIO_Port GPIOD
 #define SP_GPIO2_Pin GPIO_PIN_2
 #define SP_GPIO2_GPIO_Port GPIOD
+#define TA_CS_Pin GPIO_PIN_4
+#define TA_CS_GPIO_Port GPIOE
 #define FAN_TOP_GD2_Pin GPIO_PIN_1
 #define FAN_TOP_GD2_GPIO_Port GPIOE
 #define MCU_GPIO1_Pin GPIO_PIN_0
@@ -121,8 +125,12 @@ void Error_Handler(void);
 #define IND1_GPIO_Port GPIOA
 #define enSyncOUT_Pin GPIO_PIN_7
 #define enSyncOUT_GPIO_Port GPIOA
+#define SEED_CS_Pin GPIO_PIN_1
+#define SEED_CS_GPIO_Port GPIOB
 #define BRD_V0_Pin GPIO_PIN_9
 #define BRD_V0_GPIO_Port GPIOE
+#define OPT_CS_Pin GPIO_PIN_12
+#define OPT_CS_GPIO_Port GPIOB
 #define enSyncIN_Pin GPIO_PIN_8
 #define enSyncIN_GPIO_Port GPIOD
 
