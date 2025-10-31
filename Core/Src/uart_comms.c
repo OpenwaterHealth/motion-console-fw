@@ -35,7 +35,7 @@ volatile uint8_t tx_flag = 0;
 
 
 static ConsoleTemperatures consoleTemps;
-
+static uint8_t board_id;
 
 SemaphoreHandle_t uartTxSemaphore;
 SemaphoreHandle_t xRxSemaphore;
@@ -566,6 +566,14 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 		          uartResp->data = (uint8_t *)&tecadc_last_volts[uartResp->reserved];
 				}
 			}
+			break;
+		case OW_CTRL_BOARDID:
+			uartResp->command = OW_CTRL_BOARDID;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			uartResp->data_len = 1;
+			board_id = BoardV_Read();
+			uartResp->data = (uint8_t *)(&board_id);
 			break;
 		default:
 			uartResp->data_len = 0;

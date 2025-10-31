@@ -289,6 +289,7 @@ int main(void)
   printf("\033c");
   HAL_Delay(250);
   printf("Openwater open-MOTION Console FW v%d.%d.%d\r\n\r\n",FIRMWARE_VERSION_DATA[0], FIRMWARE_VERSION_DATA[1], FIRMWARE_VERSION_DATA[2]);
+  printf("Board Version: 0x%02X\r\n", BoardV_Read());
   printf("CPU Clock Frequency: %lu MHz\r\n", HAL_RCC_GetSysClockFreq() / 1000000);
   printf("Initializing, please wait ...\r\n");
 

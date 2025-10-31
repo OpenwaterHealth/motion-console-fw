@@ -18,5 +18,6 @@ void DWT_Init(void);
 void delay_us(uint32_t us);
 void GPIO_SetHiZ(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin);
 void GPIO_SetOutput(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, GPIO_PinState PinState);
+uint8_t BoardV_Read(void);
 
 #endif /* INC_UTILS_H_ */

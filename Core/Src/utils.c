@@ -54,6 +54,15 @@ void printBuffer(const uint8_t* buffer, uint32_t size) {
     printf("\r\n\r\n"); // Print a newline character to separate the output
 }
 
+
+uint8_t BoardV_Read(void) {
+    uint32_t idr = GPIOE->IDR;
+    uint8_t v0 = (idr >> 9) & 1u;  // PE9
+    uint8_t v1 = (idr >> 8) & 1u;  // PE8
+    uint8_t v2 = (idr >> 7) & 1u;  // PE7
+    return (v0 << 0) | (v1 << 1) | (v2 << 2);
+}
+
 uint16_t util_crc16(const uint8_t* buf, uint32_t size) {
 	uint16_t crc = 0xFFFF;
 
