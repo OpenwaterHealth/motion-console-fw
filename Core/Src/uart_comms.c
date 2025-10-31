@@ -24,10 +24,13 @@
 
 #include <string.h>
 
+#define PDU_N 16
+
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
 extern uint8_t txBuffer[COMMAND_MAX_SIZE];
 extern ADS7924_HandleTypeDef tec_ads;
+extern ADS7828_HandleTypeDef adc_mon[2];
 
 volatile uint32_t ptrReceive;
 volatile uint8_t rx_flag = 0;
@@ -36,6 +39,18 @@ volatile uint8_t tx_flag = 0;
 
 static ConsoleTemperatures consoleTemps;
 static uint8_t board_id;
+
+typedef struct {
+    uint16_t raws[PDU_N];  // 32B, naturally aligned
+    float    vals[PDU_N];  // 64B, naturally aligned
+} PDUFields_t;
+
+typedef union {
+    PDUFields_t f;
+    uint8_t     bytes[sizeof(PDUFields_t)];
+} PDUFrame_t;
+
+static PDUFrame_t pdu_frame;
 
 SemaphoreHandle_t uartTxSemaphore;
 SemaphoreHandle_t xRxSemaphore;
@@ -574,6 +589,27 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->data_len = 1;
 			board_id = BoardV_Read();
 			uartResp->data = (uint8_t *)(&board_id);
+			break;
+		case OW_CTRL_PDUMON:
+			uartResp->command = OW_CTRL_PDUMON;
+			uartResp->addr = cmd->addr;
+			uartResp->reserved = cmd->reserved;
+			if (ADS7828_ReadAllChannels2(&adc_mon[0], &pdu_frame.f.raws[0], &pdu_frame.f.vals[0]) != HAL_OK) {
+				  printf("Failed to read ADC MON 0\r\n");
+				  uartResp->data_len = 0;
+				  uartResp->data = NULL;
+				  uartResp->packet_type = OW_ERROR;
+				  break;
+			}
+			if (ADS7828_ReadAllChannels2(&adc_mon[1], &pdu_frame.f.raws[8], &pdu_frame.f.vals[8]) != HAL_OK) {
+				  printf("Failed to read ADC MON 1\r\n");
+				  uartResp->data_len = 0;
+				  uartResp->data = NULL;
+				  uartResp->packet_type = OW_ERROR;
+				  break;
+			}
+			uartResp->data_len = (uint16_t)sizeof(pdu_frame);
+			uartResp->data = pdu_frame.bytes;
 			break;
 		default:
 			uartResp->data_len = 0;

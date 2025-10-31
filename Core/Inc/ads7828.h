@@ -59,6 +59,7 @@ HAL_StatusTypeDef ADS7828_Init(ADS7828_HandleTypeDef *hadc, I2C_HandleTypeDef *h
 HAL_StatusTypeDef ADS7828_ReadChannel(ADS7828_HandleTypeDef *hadc, uint8_t channel, uint16_t *result);
 HAL_StatusTypeDef ADS7828_ReadDifferential(ADS7828_HandleTypeDef *hadc, uint8_t diff_pair, uint16_t *result);
 HAL_StatusTypeDef ADS7828_ReadAllChannels(ADS7828_HandleTypeDef *hadc, uint16_t *results);
+HAL_StatusTypeDef ADS7828_ReadAllChannels2(ADS7828_HandleTypeDef *hadc, uint16_t* raws, float *results);
 HAL_StatusTypeDef ADS7828_SetPowerMode(ADS7828_HandleTypeDef *hadc, ADS7828_PowerDown_t mode);
 float ADS7828_ConvertToVoltage(uint16_t adc_value, float vref);
 

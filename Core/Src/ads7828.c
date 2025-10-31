@@ -166,12 +166,35 @@ HAL_StatusTypeDef ADS7828_ReadAllChannels(ADS7828_HandleTypeDef *hadc, uint16_t 
         }
 
         // Small delay between conversions if needed
-        HAL_Delay(1);
+        delay_us(100);
     }
 
     return HAL_OK;
 }
 
+HAL_StatusTypeDef ADS7828_ReadAllChannels2(ADS7828_HandleTypeDef *hadc, uint16_t* raws, float *values) {
+    if (hadc == NULL || raws == NULL || values == NULL) {
+        return HAL_ERROR;
+    }
+
+    HAL_StatusTypeDef status;
+
+    HAL_StatusTypeDef ret_status = HAL_OK;
+
+    for (uint8_t channel = 0; channel < 8; channel++) {
+        status = ADS7828_ReadChannel(hadc, channel, &raws[channel]);
+        if (status == HAL_OK) {
+        	values[channel] = ADS7828_ConvertToVoltage(raws[channel], 2.5f);
+        }else{
+        	ret_status = HAL_ERROR;
+        }
+
+        // Small delay between conversions if needed
+        delay_us(10);
+    }
+
+    return ret_status;
+}
 /**
   * @brief  Set power-down mode
   * @param  hadc: Pointer to ADS7828 handle structure

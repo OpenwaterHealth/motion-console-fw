@@ -50,7 +50,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-// #define SCAN_DISPLAY
+#define SCAN_DISPLAY
 
 /* USER CODE END PD */
 
@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 3};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 4};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -276,15 +276,6 @@ int main(void)
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_SET);
 
-  // setup PDU monitor
-  if((ADS7828_Init(&adc_mon[0], &hi2c2, 0x00) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[0], ADS7828_PD_ON_REF_ON) != HAL_OK))
-  {
-	  printf("Failed to initialize ADC0\r\n");
-  }
-  if((ADS7828_Init(&adc_mon[1], &hi2c2, 0x03) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[1], ADS7828_PD_ON_REF_ON) != HAL_OK))
-  {
-	  printf("Failed to initialize ADC0\r\n");
-  }
 
   printf("\033c");
   HAL_Delay(250);
@@ -367,7 +358,7 @@ int main(void)
   // I2C_scan(&hi2c1, NULL, 0, true);
 
 
-  TCA9548A_SelectChannel(1, 2); // scan eeprom and TEC ADC
+  TCA9548A_SelectChannel(1, 0); // scan pdu
   // TCA9548A_SelectChannel(1, 1); // scan temp sensors
   printf("I2C2\r\n");
   I2C_scan(&hi2c2, NULL, 0, true);
@@ -376,6 +367,17 @@ int main(void)
   // I2C_scan(&hi2c4, NULL, 0, true);
 
 #endif
+
+  // setup PDU monitor
+  if((ADS7828_Init(&adc_mon[0], &hi2c2, 0x00) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[0], ADS7828_PD_ON_REF_ON) != HAL_OK))
+  {
+	  printf("Failed to initialize ADC0\r\n");
+  }
+
+  if((ADS7828_Init(&adc_mon[1], &hi2c2, 0x03) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[1], ADS7828_PD_ON_REF_ON) != HAL_OK))
+  {
+	  printf("Failed to initialize ADC0\r\n");
+  }
 
   ADS7924_Init(&tec_ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
   
