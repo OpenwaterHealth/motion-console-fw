@@ -50,7 +50,7 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 
-#define SCAN_DISPLAY
+// #define SCAN_DISPLAY
 
 /* USER CODE END PD */
 
