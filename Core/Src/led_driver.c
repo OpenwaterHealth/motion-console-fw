@@ -16,27 +16,27 @@ void LED_Init(void)
 {
 	printf("Initializing Indicators\r\n");
     // Turn all LEDs off initially
-    HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_SET);
 }
 
 void LED_RGB_SET(uint8_t rgbState)
 {
 	rgb_state = rgbState;
-	HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+	HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_SET);
 	switch(rgb_state)
 	{
 		case 1:
-			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
 			break;
 		case 2:
-			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
 			break;
 		case 3:
-			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_SET);
+			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
 			break;
 		case 0:
 		default:
@@ -53,9 +53,9 @@ uint8_t LED_RGB_GET(void)
 void LED_SetState(GPIO_TypeDef *GPIO_Port, uint16_t GPIO_Pin, LED_State state)
 {
     if (state == LED_ON) {
-        HAL_GPIO_WritePin(GPIO_Port, GPIO_Pin, GPIO_PIN_SET); // Turn LED on
+        HAL_GPIO_WritePin(GPIO_Port, GPIO_Pin, GPIO_PIN_RESET); // Turn LED on
     } else {
-        HAL_GPIO_WritePin(GPIO_Port, GPIO_Pin, GPIO_PIN_RESET); // Turn LED off
+        HAL_GPIO_WritePin(GPIO_Port, GPIO_Pin, GPIO_PIN_SET); // Turn LED off
     }
 }
 

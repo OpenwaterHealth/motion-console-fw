@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 2};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 3};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -1316,16 +1316,19 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOB, SYS_EN_Pin|LED_ON_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, EE_CS_Pin|IO_EXP_RSTN_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOA, EE_CS_Pin|IO_EXP_RSTN_Pin|IND1_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOD, IND3_Pin|IND2_Pin|enSyncIN_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOD, IND3_Pin|IND2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, SCL_CFG_Pin|IND1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SCL_CFG_GPIO_Port, SCL_CFG_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, SEED_CS_Pin|OPT_CS_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(enSyncIN_GPIO_Port, enSyncIN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pins : HUB_RESET_Pin SDA_REM_Pin */
   GPIO_InitStruct.Pin = HUB_RESET_Pin|SDA_REM_Pin;
