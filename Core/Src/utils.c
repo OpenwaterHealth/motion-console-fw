@@ -54,6 +54,15 @@ void printBuffer(const uint8_t* buffer, uint32_t size) {
     printf("\r\n\r\n"); // Print a newline character to separate the output
 }
 
+
+uint8_t BoardV_Read(void) {
+    uint32_t idr = GPIOE->IDR;
+    uint8_t v0 = (idr >> 9) & 1u;  // PE9
+    uint8_t v1 = (idr >> 8) & 1u;  // PE8
+    uint8_t v2 = (idr >> 7) & 1u;  // PE7
+    return (v0 << 0) | (v1 << 1) | (v2 << 2);
+}
+
 uint16_t util_crc16(const uint8_t* buf, uint32_t size) {
 	uint16_t crc = 0xFFFF;
 
@@ -71,3 +80,54 @@ uint16_t util_hw_crc16(uint8_t* buf, uint32_t size)
 	printf("uwCRCValue 0x%08lx\r\n", uwCRCValue);
 	return (uint16_t)uwCRCValue;
 }
+
+
+
+void DWT_Init(void)
+{
+    CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+    DWT->CYCCNT = 0;
+    DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+}
+
+void delay_us(uint32_t us)
+{
+    uint32_t cycles_per_us = SystemCoreClock / 1000000;
+    uint32_t start = DWT->CYCCNT;
+    uint32_t delay_cycles = us * cycles_per_us;
+
+    while ((DWT->CYCCNT - start) < delay_cycles);
+}
+
+void GPIO_SetHiZ(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin)
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    // Disable the pin before reconfiguring
+    HAL_GPIO_DeInit(GPIOx, GPIO_Pin);
+
+    GPIO_InitStruct.Pin = GPIO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;      // Input mode
+    GPIO_InitStruct.Pull = GPIO_NOPULL;          // No pull-up, no pull-down
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Speed doesn't matter for input
+
+    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+}
+
+void GPIO_SetOutput(GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, GPIO_PinState PinState)
+{
+    GPIO_InitTypeDef GPIO_InitStruct = {0};
+
+    // Disable the pin before reconfiguring
+    HAL_GPIO_DeInit(GPIOx, GPIO_Pin);
+
+    GPIO_InitStruct.Pin = GPIO_Pin;
+    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;      // Input mode
+    GPIO_InitStruct.Pull = GPIO_NOPULL;          // No pull-up, no pull-down
+    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW; // Speed doesn't matter for input
+
+    HAL_GPIO_Init(GPIOx, &GPIO_InitStruct);
+
+    HAL_GPIO_WritePin(GPIOx, GPIO_Pin, PinState);
+}
+

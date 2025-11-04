@@ -13,7 +13,7 @@ void PCA9535APW_Init(I2C_HandleTypeDef *hi2c)
     pca_i2c = hi2c;
 
     // Set all pins as inputs by default (reset state)
-    PCA9535APW_SetPortDirection(0, 0xFF);
+    PCA9535APW_SetPortDirection(0, 0x7F);
     PCA9535APW_SetPortDirection(1, 0xFF);
 }
 

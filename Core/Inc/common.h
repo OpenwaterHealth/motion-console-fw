@@ -101,6 +101,14 @@ typedef enum {
 	OW_CTRL_I2C_WR = 0x1A,
 	OW_CTRL_GET_FSYNC = 0x1B,
 	OW_CTRL_GET_LSYNC = 0x1C,
+	OW_CTRL_TEC_DAC = 0x1D,
+	OW_CTRL_READ_ADC = 0x1E,
+	OW_CTRL_READ_GPIO = 0x1F,
+	OW_CTRL_GET_TEMPS = 0x20,
+	OW_CTRL_TECADC = 0x21,
+	OW_CTRL_TEC_STATUS = 0x22,
+	OW_CTRL_BOARDID = 0x23,
+	OW_CTRL_PDUMON = 0x24,
 } MotionControllerCommands;
 
 typedef enum {
@@ -132,6 +140,15 @@ typedef struct  {
 	uint8_t* data;
 	uint16_t crc;
 } UartPacket;
+
+typedef union {
+    struct __attribute__((packed)) {
+        float t1;
+        float t2;
+        float t3;
+    } f;
+    uint8_t bytes[12];
+} ConsoleTemperatures;
 
 _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd);
 
