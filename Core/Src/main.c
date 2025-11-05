@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 4};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 5};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -338,7 +338,7 @@ int main(void)
 
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
 
-  LED_RGB_SET(3); // Red
+  LED_RGB_SET(1); // RED - starting up
 
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
@@ -435,7 +435,7 @@ int main(void)
   comms_init();
 
 
-  LED_RGB_SET(2); // Green
+  LED_RGB_SET(3); // Green - happy
 
   /* USER CODE END RTOS_THREADS */
 
@@ -1546,7 +1546,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
 
-  LED_RGB_SET(3); // Red
+  LED_RGB_SET(1); // Red - error
 
   __disable_irq();
   while (1)
