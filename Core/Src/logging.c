@@ -12,9 +12,9 @@ volatile bool bPrintfTransferComplete = false;
 
 static uint8_t usart_start_tx_dma_transfer(void);
 
-/* Ring buffer for TX data */
+/* Ring buffer for TX data - Must be in DMA-accessible memory (not DTCM) */
 lwrb_t usart_tx_buff;
-uint8_t usart_tx_buff_data[4096];
+uint8_t usart_tx_buff_data[1024] __attribute__((section(".dma_buffer")));
 volatile size_t usart_tx_dma_current_len;
 
 
