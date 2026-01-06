@@ -358,13 +358,13 @@ int main(void)
   // I2C_scan(&hi2c1, NULL, 0, true);
 
 
-  TCA9548A_SelectChannel(1, 0); // scan pdu
+  //TCA9548A_SelectChannel(1, 0); // scan pdu
   // TCA9548A_SelectChannel(1, 1); // scan temp sensors
-  printf("I2C2\r\n");
-  I2C_scan(&hi2c2, NULL, 0, true);
+  //printf("I2C2\r\n");
+  //I2C_scan(&hi2c2, NULL, 0, true);
 
-  // printf("I2C4\r\n");
-  // I2C_scan(&hi2c4, NULL, 0, true);
+  printf("I2C4\r\n");
+  I2C_scan(&hi2c4, NULL, 0, true);
 
 #endif
 

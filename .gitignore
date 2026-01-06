@@ -1,5 +1,6 @@
 /Debug/
 /Release/
+/build/
 /.settings/
 /.vscode/
 *.launch
@@ -47,3 +48,5 @@
 *.su
 *.idb
 *.pdb
+
+platform.json
