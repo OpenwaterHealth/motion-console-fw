@@ -1,0 +1,28 @@
+name: Build firmware using published build image
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository_owner }}/stm32-build-env:latest
+      options: --privileged
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure and build (Debug preset)
+        run: |
+          cmake --preset Debug
+          cmake --build build/Debug --config Debug --target all -j 10
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-hex
+          path: build/Debug/*.hex

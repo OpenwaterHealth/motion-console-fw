@@ -1,0 +1,15 @@
+# Ignore build artifacts
+build/
+
+# Ignore Git files
+.git
+
+# Ignore editor files
+.vscode/
+*.swp
+*.swo
+
+# Ignore other unnecessary files
+*.o
+*.d
+*.log
