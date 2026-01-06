@@ -5,7 +5,7 @@
  *      Author: GeorgeVigelette
  */
 
-#include "MAX31875.h"
+#include "max31875.h"
 extern I2C_HandleTypeDef hi2c2;
 										// declaration of static variable
 static bool extended_Enable = false;												// declaration & initialization of static boolean variable
