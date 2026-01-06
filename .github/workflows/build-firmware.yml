@@ -8,18 +8,22 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/${{ toLower(github.repository_owner) }}/stm32-build-env:latest
-      options: --privileged
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Configure and build (Debug preset)
+      - name: Pull build image
+        run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest
+
+      - name: Build inside container
         run: |
-          cmake --preset Debug
-          cmake --build build/Debug --config Debug --target all -j 10
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -w /workspace \
+            --workdir /workspace \
+            ghcr.io/openwaterhealth/stm32-build-env:latest \
+            bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
