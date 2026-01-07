@@ -28,5 +28,5 @@ jobs:
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-hex
+          name: motion-console-fw
           path: build/Debug/*.hex
