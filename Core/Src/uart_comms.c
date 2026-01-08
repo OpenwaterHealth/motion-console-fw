@@ -661,7 +661,6 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
 			break;
 		case OW_CMD_TOGGLE_LED:
 			//printf("Toggle LED\r\n");
-			HAL_GPIO_TogglePin(LED_ON_GPIO_Port, LED_ON_Pin);
 			break;
 		case OW_CMD_RESET:
 			//printf("Soft Reset\r\n");

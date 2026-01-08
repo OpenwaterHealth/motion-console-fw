@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 6};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 0};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -274,8 +274,6 @@ int main(void)
 
 
   HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_SET);
-
 
   printf("\033c");
   HAL_Delay(250);
@@ -408,7 +406,6 @@ int main(void)
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
-  HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
 
@@ -1322,7 +1319,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|TECDAC_SS_Pin|TA_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, SYS_EN_Pin|LED_ON_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, EE_CS_Pin|IO_EXP_RSTN_Pin|IND1_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
@@ -1353,8 +1350,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SYS_EN_Pin LED_ON_Pin SEED_CS_Pin OPT_CS_Pin */
-  GPIO_InitStruct.Pin = SYS_EN_Pin|LED_ON_Pin|SEED_CS_Pin|OPT_CS_Pin;
+  /*Configure GPIO pins : SYS_EN_Pin SEED_CS_Pin OPT_CS_Pin */
+  GPIO_InitStruct.Pin = SYS_EN_Pin|SEED_CS_Pin|OPT_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1384,10 +1381,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : FAN_TOP_GD2_Pin MCU_GPIO1_Pin TEMPGD_Pin BRD_V2_Pin
-                           POWER_DETECT_Pin BRD_V0_Pin */
-  GPIO_InitStruct.Pin = FAN_TOP_GD2_Pin|MCU_GPIO1_Pin|TEMPGD_Pin|BRD_V2_Pin
-                          |POWER_DETECT_Pin|BRD_V0_Pin;
+  /*Configure GPIO pins : FAN_TOP_GD2_Pin MCU_GPIO1_Pin TEMPGD_Pin FAN_TOP_GD3_Pin
+                           BRD_V2_Pin FAN_TOP_GD4_Pin BRD_V0_Pin */
+  GPIO_InitStruct.Pin = FAN_TOP_GD2_Pin|MCU_GPIO1_Pin|TEMPGD_Pin|FAN_TOP_GD3_Pin
+                          |BRD_V2_Pin|FAN_TOP_GD4_Pin|BRD_V0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
