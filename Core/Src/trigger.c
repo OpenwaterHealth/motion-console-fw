@@ -238,6 +238,7 @@ HAL_StatusTypeDef Trigger_SetConfigFromJSON(char *jsonString, size_t str_len)
 	bool ret = HAL_OK;
 
 	Trigger_Config_t new_config;
+    new_config.LaserPulseSkipDelayUsec = 1800; //
     // Copy the JSON string to tempArr
     memcpy((char *)tempArr, (char *)jsonString, str_len);
 
@@ -288,11 +289,11 @@ void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0 || (fsync_counter < NUM_DARK_FRAMES_AT_START )) {
             __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
             __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
-            printf("Long LSYNC\r\n");
+            // printf("Long LSYNC\r\n");
         } else {
             __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
             __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
-            printf("Short LSYNC\r\n");
+            // printf("Short LSYNC\r\n");
         }
     }
 }
