@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 4};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 6};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -338,7 +338,7 @@ int main(void)
 
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
 
-  LED_RGB_SET(3); // Red
+  LED_RGB_SET(1); // RED - starting up
 
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
@@ -358,13 +358,13 @@ int main(void)
   // I2C_scan(&hi2c1, NULL, 0, true);
 
 
-  TCA9548A_SelectChannel(1, 0); // scan pdu
+  //TCA9548A_SelectChannel(1, 0); // scan pdu
   // TCA9548A_SelectChannel(1, 1); // scan temp sensors
-  printf("I2C2\r\n");
-  I2C_scan(&hi2c2, NULL, 0, true);
+  //printf("I2C2\r\n");
+  //I2C_scan(&hi2c2, NULL, 0, true);
 
-  // printf("I2C4\r\n");
-  // I2C_scan(&hi2c4, NULL, 0, true);
+  printf("I2C4\r\n");
+  I2C_scan(&hi2c4, NULL, 0, true);
 
 #endif
 
@@ -372,11 +372,17 @@ int main(void)
   if((ADS7828_Init(&adc_mon[0], &hi2c2, 0x00) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[0], ADS7828_PD_ON_REF_ON) != HAL_OK))
   {
 	  printf("Failed to initialize ADC0\r\n");
+  }else{
+	  uint16_t raw;
+	  ADS7828_ReadChannel(&adc_mon[0], 0, &raw);
   }
 
   if((ADS7828_Init(&adc_mon[1], &hi2c2, 0x03) != HAL_OK) & (ADS7828_SetPowerMode(&adc_mon[1], ADS7828_PD_ON_REF_ON) != HAL_OK))
   {
 	  printf("Failed to initialize ADC0\r\n");
+  }else{
+	  uint16_t raw;
+	  ADS7828_ReadChannel(&adc_mon[1], 0, &raw);
   }
 
   ADS7924_Init(&tec_ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
@@ -435,7 +441,7 @@ int main(void)
   comms_init();
 
 
-  LED_RGB_SET(2); // Green
+  LED_RGB_SET(3); // Green - happy
 
   /* USER CODE END RTOS_THREADS */
 
@@ -1549,7 +1555,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
 
-  LED_RGB_SET(3); // Red
+  LED_RGB_SET(1); // Red - error
 
   __disable_irq();
   while (1)

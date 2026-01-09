@@ -1,0 +1,32 @@
+name: Build firmware using published build image
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Pull build image
+        run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest
+
+      - name: Build inside container
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE":/workspace \
+            -w /workspace \
+            --workdir /workspace \
+            ghcr.io/openwaterhealth/stm32-build-env:latest \
+            bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-console-fw
+          path: build/Debug/*.hex

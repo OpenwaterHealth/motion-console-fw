@@ -443,7 +443,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
 
-			LED_RGB_SET(1); // Blue
+			LED_RGB_SET(2); // Blue
 			Trigger_Start();
 			break;
 		case OW_CTRL_STOP_TRIG:
@@ -452,7 +452,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 			uartResp->reserved = cmd->reserved;
 			uartResp->data_len = 0;
 
-			LED_RGB_SET(2); // Green
+			LED_RGB_SET(3); // Green
 			Trigger_Stop();
 			break;
 		case OW_CTRL_GET_FSYNC:

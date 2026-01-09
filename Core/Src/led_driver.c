@@ -30,13 +30,13 @@ void LED_RGB_SET(uint8_t rgbState)
 	switch(rgb_state)
 	{
 		case 1:
-			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND1_GPIO_Port, IND1_Pin, GPIO_PIN_RESET); // red
 			break;
 		case 2:
-			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND2_GPIO_Port, IND2_Pin, GPIO_PIN_RESET); // blue
 			break;
 		case 3:
-			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(IND3_GPIO_Port, IND3_Pin, GPIO_PIN_RESET); // green
 			break;
 		case 0:
 		default:
