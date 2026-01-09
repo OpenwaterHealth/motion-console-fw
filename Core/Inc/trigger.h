@@ -15,6 +15,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#define NUM_DARK_FRAMES_AT_START 5
+
 typedef struct {
     uint32_t frequencyHz;        // Trigger frequency in Hz 1 - 100
     uint32_t triggerPulseWidthUsec;     // Pulse width in microseconds max determined by freq
@@ -24,6 +26,7 @@ typedef struct {
     bool EnableSyncOut;
     bool EnableTaTrigger;
     uint32_t TriggerStatus;
+    uint32_t LaserPulseSkipDelayUsec;
 } Trigger_Config_t;
 
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config);
@@ -36,6 +39,8 @@ uint32_t get_fsync_pulse_count(void);
 
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
+
+void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
 
 extern Trigger_Config_t trigger_config;
 

@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 6};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 7};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -1514,6 +1514,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   /* USER CODE BEGIN Callback 0 */
   if (htim->Instance == TIM4) {
 
+  }
+  if (htim->Instance == FSYNC_TIMER.Instance) {
+    FSYNC_PeriodElapsedCallback(htim);
   }
 
   if (htim->Instance == TIM12) {
