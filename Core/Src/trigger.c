@@ -152,6 +152,10 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
 		HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
 	}
 
+    // Reset the counters on SetConfig
+	lsync_counter = 1;
+	fsync_counter = 1;
+    
     // Use fixed 1 MHz timer tick (1 µs per tick)
     uint32_t fsync_prescaler = 119; // (e.g., 120MHz / (119+1) = 1 MHz)
     FSYNC_TIMER.Instance->PSC = fsync_prescaler;
@@ -204,8 +208,8 @@ HAL_StatusTypeDef Trigger_Start() {
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, trigger_config.EnableSyncOut? GPIO_PIN_RESET:GPIO_PIN_SET); // fsync out
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, trigger_config.EnableTaTrigger? GPIO_PIN_RESET:GPIO_PIN_SET); // TA Trigger enable
 
-	lsync_counter = 0;
-	fsync_counter = 0;
+	lsync_counter = 1;
+	fsync_counter = 1;
 
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
 	if(HAL_TIM_OC_Start_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
