@@ -3,7 +3,7 @@ name: Build firmware using published build image
 on:
   workflow_dispatch: {}
   push:
-    branches: [ "main" ]
+    branches: [ "main", "next" ]
 
 jobs:
   build:
