@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 0};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 1};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -273,7 +273,7 @@ int main(void)
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_RESET);
 
 
-  HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
+  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
 
   printf("\033c");
   HAL_Delay(250);
@@ -316,7 +316,7 @@ int main(void)
   }
 
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
+  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
 
 
   HAL_GPIO_WritePin(enSyncIN_GPIO_Port, enSyncIN_Pin, GPIO_PIN_RESET); // set for internal sync
@@ -1319,7 +1319,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|TECDAC_SS_Pin|TA_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
+  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, EE_CS_Pin|IO_EXP_RSTN_Pin|IND1_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
@@ -1351,7 +1351,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : SYS_EN_Pin SEED_CS_Pin OPT_CS_Pin */
-  GPIO_InitStruct.Pin = SYS_EN_Pin|SEED_CS_Pin|OPT_CS_Pin;
+  GPIO_InitStruct.Pin = SEED_CS_Pin|OPT_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
