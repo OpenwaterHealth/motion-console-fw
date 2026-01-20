@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 1};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 2};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -383,7 +383,7 @@ int main(void)
 	  ADS7828_ReadChannel(&adc_mon[1], 0, &raw);
   }
 
-  ADS7924_Init(&tec_ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
+  ADS7924_Init(&tec_ads, &hi2c2, 1, 3, ADS7924_ADDR_A0_DVDD, 3.300f, true);
   
   FAN_Init(&fan, &hi2c4, 0x2C);
 
