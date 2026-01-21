@@ -92,7 +92,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 2};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 3};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -294,7 +294,7 @@ int main(void)
   tec_dac.rst_port=NULL;
   tec_dac.rst_pin=0;
   tec_dac.type=AD5761R,
-  tec_dac.ra=AD5761R_RANGE_0V_TO_P_5V;
+  tec_dac.ra=AD5761R_RANGE_M_5V_TO_P_5V;
   tec_dac.pv=AD5761R_SCALE_FULL;
   tec_dac.cv=AD5761R_SCALE_FULL;
   tec_dac.int_ref_en=true;
