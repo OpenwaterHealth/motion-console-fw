@@ -34,6 +34,7 @@
 #include "ads7924.h"
 #include "fan_driver.h"
 #include "ad5761r.h"
+#include "XO2_dev.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -103,6 +104,7 @@ extern ADS7828_HandleTypeDef adc_mon[2];
 ADS7924_HandleTypeDef tec_ads;
 extern bool ad5761r_enabled;
 extern FAN_Driver fan;
+extern MachSTM_Handle_t machSTM_hdl;
 
 ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
@@ -281,6 +283,12 @@ int main(void)
   printf("Board Version: 0x%02X\r\n", BoardV_Read());
   printf("CPU Clock Frequency: %lu MHz\r\n", HAL_RCC_GetSysClockFreq() / 1000000);
   printf("Initializing, please wait ...\r\n");
+
+  // setup fpga programming
+  machSTM_hdl.addr7 = MACHXO_I2C_ADDR_7BIT;
+  machSTM_hdl.hi2c = &hi2c1;
+  machSTM_hdl.fpga_idx = 0;
+  machSTM_hdl.verbose = 0u;
 
   // configure TEC DAC
   printf("Initialize TEC DAC\r\n");
