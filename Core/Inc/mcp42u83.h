@@ -46,9 +46,11 @@ typedef struct {
     SPI_HandleTypeDef *hspi;      // SPI handle
     GPIO_TypeDef *cs_port;         // Chip select GPIO port
     uint16_t cs_pin;               // Chip select GPIO pin
-    uint32_t timeout_ms;           // SPI timeout in milliseconds
+    uint32_t timeout_ms;           // communication timeout in milliseconds
     uint8_t wiper_pos[MCP42U83_NUM_POTS];  // Current wiper positions (cached)
     float resistance_kohm;         // Total resistance in kΩ (83kΩ for MCP42U83)
+    I2C_HandleTypeDef *hi2c;      // I2C handle (set for I2C mode)
+    uint16_t i2c_addr;            // 7-bit I2C address (I2C mode)
 } mcp42u83_dev;
 
 /**
@@ -61,9 +63,26 @@ typedef struct {
  * @param timeout_ms SPI timeout in milliseconds (default: 100)
  * @return HAL_StatusTypeDef HAL_OK if successful
  */
+/**
+ * @brief Initialize MCP42U83 device structure
+ *
+ * Either the SPI parameters or the I2C parameters must be provided, but not both.
+ * - For SPI mode: provide non-NULL `hspi` and `cs_port`/`cs_pin`, set `hi2c` NULL and `i2c_addr` 0.
+ * - For I2C mode: provide non-NULL `hi2c` and a valid 7-bit `i2c_addr`, set `hspi` NULL.
+ *
+ * @param dev Pointer to device structure
+ * @param hspi SPI handle (NULL if using I2C)
+ * @param cs_port CS GPIO port (SPI only)
+ * @param cs_pin CS GPIO pin (SPI only)
+ * @param hi2c I2C handle (NULL if using SPI)
+ * @param i2c_addr 7-bit I2C address (0 if using SPI)
+ * @param timeout_ms timeout for bus transfers in milliseconds
+ * @return HAL_StatusTypeDef
+ */
 HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
-                                 GPIO_TypeDef *cs_port, uint16_t cs_pin,
-                                 uint32_t timeout_ms);
+                                            GPIO_TypeDef *cs_port, uint16_t cs_pin,
+                                            I2C_HandleTypeDef *hi2c, uint16_t i2c_addr,
+                                            uint32_t timeout_ms);
 
 /**
  * @brief Set wiper position for a specific potentiometer

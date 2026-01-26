@@ -7,12 +7,16 @@ mcp42u83_dev mcp42u83_device;
 /* Internal helper functions */
 static inline void cs_low(const mcp42u83_dev *dev)
 {
-    HAL_GPIO_WritePin(dev->cs_port, dev->cs_pin, GPIO_PIN_RESET);
+    if (dev && dev->hspi && dev->cs_port) {
+        HAL_GPIO_WritePin(dev->cs_port, dev->cs_pin, GPIO_PIN_RESET);
+    }
 }
 
 static inline void cs_high(const mcp42u83_dev *dev)
 {
-    HAL_GPIO_WritePin(dev->cs_port, dev->cs_pin, GPIO_PIN_SET);
+    if (dev && dev->hspi && dev->cs_port) {
+        HAL_GPIO_WritePin(dev->cs_port, dev->cs_pin, GPIO_PIN_SET);
+    }
 }
 
 /**
@@ -32,16 +36,25 @@ static HAL_StatusTypeDef mcp42u83_write(mcp42u83_dev *dev, uint8_t cmd_byte, uin
     tx_data[0] = cmd_byte;
     tx_data[1] = data_byte;
     
-    // Pull CS low
-    cs_low(dev);
-    
-    // Transmit the command
-    status = HAL_SPI_Transmit(dev->hspi, tx_data, 2, dev->timeout_ms);
-    
-    // Pull CS high
-    cs_high(dev);
-    
-    return status;
+    // Use SPI if hspi present, otherwise use I2C if hi2c present
+    if (dev == NULL) {
+        return HAL_ERROR;
+    }
+
+    if (dev->hspi != NULL) {
+        cs_low(dev);
+        status = HAL_SPI_Transmit(dev->hspi, tx_data, 2, dev->timeout_ms);
+        cs_high(dev);
+        return status;
+    }
+
+    if (dev->hi2c != NULL) {
+        // HAL_I2C expects 8-bit address (left-shifted)
+        uint16_t addr8 = (uint16_t)(dev->i2c_addr << 1);
+        return HAL_I2C_Master_Transmit(dev->hi2c, addr8, tx_data, 2, dev->timeout_ms);
+    }
+
+    return HAL_ERROR; // no bus configured
 }
 
 /**
@@ -49,16 +62,20 @@ static HAL_StatusTypeDef mcp42u83_write(mcp42u83_dev *dev, uint8_t cmd_byte, uin
  */
 HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
                                  GPIO_TypeDef *cs_port, uint16_t cs_pin,
+                                 I2C_HandleTypeDef *hi2c, uint16_t i2c_addr,
                                  uint32_t timeout_ms)
 {
     if (dev == NULL || hspi == NULL || cs_port == NULL) {
-        return HAL_ERROR;
+        // legacy SPI-only check removed: we'll validate below
+        ;
     }
     
     // Initialize device structure
     dev->hspi = hspi;
     dev->cs_port = cs_port;
     dev->cs_pin = cs_pin;
+    dev->hi2c = hi2c;
+    dev->i2c_addr = i2c_addr;
     dev->timeout_ms = (timeout_ms > 0) ? timeout_ms : 100;
     dev->resistance_kohm = 83.0f;  // MCP42U83 has 83kΩ resistance
     
@@ -66,10 +83,17 @@ HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
     dev->wiper_pos[MCP42U83_POT_0] = MCP42U83_MID_POSITION;
     dev->wiper_pos[MCP42U83_POT_1] = MCP42U83_MID_POSITION;
     
-    // Set CS high (inactive)
-    cs_high(dev);
-    
-    // Set both wipers to mid-scale position
+    // Validate mutually exclusive bus selection
+    if ((dev->hspi != NULL && dev->hi2c != NULL) || (dev->hspi == NULL && dev->hi2c == NULL)) {
+        return HAL_ERROR; // must provide exactly one bus
+    }
+
+    if (dev->hspi != NULL) {
+        // Set CS high (inactive)
+        cs_high(dev);
+    }
+
+    // Initialize device wipers to mid-scale on the selected bus
     return mcp42u83_set_both_wipers(dev, MCP42U83_MID_POSITION);
 }
 
