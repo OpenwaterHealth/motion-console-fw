@@ -2,6 +2,8 @@
 #include <string.h>
 #include <math.h>
 
+mcp42u83_dev mcp42u83_device;
+
 /* Internal helper functions */
 static inline void cs_low(const mcp42u83_dev *dev)
 {
