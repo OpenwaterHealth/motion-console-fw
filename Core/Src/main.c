@@ -1442,6 +1442,14 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 	}
 }
 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+
+    if (huart->Instance == USART1) {
+        // Handle errors here. Maybe reset DMA reception, etc.
+        comms_handle_ErrorCallback(huart);
+    }
+}
+
 void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
 	  if (htim->Instance == TIM2) {
