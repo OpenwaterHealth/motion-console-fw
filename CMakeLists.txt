@@ -56,6 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/max31875.c
     Core/Src/pca9535.c
     Core/Src/tca9548.c
+    Core/Src/mcp42u83.c
     Core/Src/trigger.c
     Core/Src/XO2_dev.c
     Core/Src/XO2_cmds.c
