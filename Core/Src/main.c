@@ -32,6 +32,7 @@
 #include "pca9535.h"
 #include "ads7828.h"
 #include "ads7924.h"
+#include "mcp42u83.h"
 #include "fan_driver.h"
 #include "ad5761r.h"
 #include "XO2_dev.h"
@@ -105,6 +106,7 @@ ADS7924_HandleTypeDef tec_ads;
 extern bool ad5761r_enabled;
 extern FAN_Driver fan;
 extern MachSTM_Handle_t machSTM_hdl;
+extern mcp42u83_dev mcp42u83_device;
 
 ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
@@ -413,6 +415,9 @@ int main(void)
   TCA9548A_SelectChannel(1, 0);
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
+
+  mcp42u83_device.hi2c = &hi2c1;
+  mcp42u83_device.i2c_addr = 0x58;
 
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
