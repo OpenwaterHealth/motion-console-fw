@@ -9,23 +9,29 @@
 extern "C" {
 #endif
 
-/* MCP42U83 Command Byte Format */
-#define MCP42U83_CMD_WRITE          0x00  // Write data to specified pot
-#define MCP42U83_CMD_SHUTDOWN       0x20  // Enter low-power shutdown mode
+/* MCP42U83 register addresses (datasheet Table 4-3) */
+#define MCP42U83_REG_WIPER0         0x01
+#define MCP42U83_REG_WIPER1         0x02
+#define MCP42U83_REG_TCON0          0x0A
+#define MCP42U83_REG_STATUS         0x08
 
-/* Address Bits */
-#define MCP42U83_ADDR_POT0          0x01  // Potentiometer 0 address
-#define MCP42U83_ADDR_POT1          0x02  // Potentiometer 1 address
-#define MCP42U83_ADDR_BOTH          0x03  // Both potentiometers
+/* MCP42U83 command codes (datasheet Table 7-1 / 6-2) */
+#define MCP42U83_CMD_WRITE          0x00  // 00Xb
+#define MCP42U83_CMD_READ           0x06  // 11Xb
+#define MCP42U83_CMD_INCREMENT      0x02  // 010b
+#define MCP42U83_CMD_DECREMENT      0x04  // 100b
 
-/* Shutdown Modes */
-#define MCP42U83_SHUTDOWN_POT0      0x01  // Shutdown potentiometer 0
-#define MCP42U83_SHUTDOWN_POT1      0x02  // Shutdown potentiometer 1
-#define MCP42U83_SHUTDOWN_BOTH      0x03  // Shutdown both potentiometers
+/* TCON0 bits (datasheet Section 4.7.1) */
+#define MCP42U83_TCON_R0A            (1U << 0)
+#define MCP42U83_TCON_R0W            (1U << 1)
+#define MCP42U83_TCON_R0B            (1U << 2)
+#define MCP42U83_TCON_R1A            (1U << 3)
+#define MCP42U83_TCON_R1W            (1U << 4)
+#define MCP42U83_TCON_R1B            (1U << 5)
 
-/* Maximum wiper position (8-bit) */
-#define MCP42U83_MAX_POSITION       255
-#define MCP42U83_MID_POSITION       128
+/* Maximum wiper position (10-bit) */
+#define MCP42U83_MAX_POSITION       1023
+#define MCP42U83_MID_POSITION       512
 #define MCP42U83_MIN_POSITION       0
 
 /* Number of potentiometers */
@@ -40,6 +46,17 @@ typedef enum {
 } mcp42u83_pot_channel;
 
 /**
+ * @brief MCP42U83 resistance options (kΩ)
+ */
+typedef enum {
+    MCP42U83_R_AB_5K = 5,
+    MCP42U83_R_AB_10K = 10,
+    MCP42U83_R_AB_20K = 20,
+    MCP42U83_R_AB_50K = 50,
+    MCP42U83_R_AB_100K = 100,
+} mcp42u83_resistance_option;
+
+/**
  * @brief MCP42U83 device structure
  */
 typedef struct {
@@ -47,8 +64,8 @@ typedef struct {
     GPIO_TypeDef *cs_port;         // Chip select GPIO port
     uint16_t cs_pin;               // Chip select GPIO pin
     uint32_t timeout_ms;           // communication timeout in milliseconds
-    uint8_t wiper_pos[MCP42U83_NUM_POTS];  // Current wiper positions (cached)
-    float resistance_kohm;         // Total resistance in kΩ (83kΩ for MCP42U83)
+    uint16_t wiper_pos[MCP42U83_NUM_POTS];  // Current wiper positions (cached)
+    float resistance_kohm;         // Total resistance in kΩ (5/10/20/50/100kΩ)
     I2C_HandleTypeDef *hi2c;      // I2C handle (set for I2C mode)
     uint16_t i2c_addr;            // 7-bit I2C address (I2C mode)
 } mcp42u83_dev;
@@ -76,52 +93,54 @@ typedef struct {
  * @param cs_pin CS GPIO pin (SPI only)
  * @param hi2c I2C handle (NULL if using SPI)
  * @param i2c_addr 7-bit I2C address (0 if using SPI)
+ * @param resistance Total resistance option for the device (kΩ)
  * @param timeout_ms timeout for bus transfers in milliseconds
  * @return HAL_StatusTypeDef
  */
 HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
                                             GPIO_TypeDef *cs_port, uint16_t cs_pin,
                                             I2C_HandleTypeDef *hi2c, uint16_t i2c_addr,
+                                            mcp42u83_resistance_option resistance,
                                             uint32_t timeout_ms);
 
 /**
  * @brief Set wiper position for a specific potentiometer
  * 
  * @param dev Pointer to device structure
- * @param channel Potentiometer channel (POT_0 or POT_1)
- * @param position Wiper position (0-255)
+ * @param channel Potentiometer channel 
+ * @param position Wiper position (0-1023)
  * @return HAL_StatusTypeDef HAL_OK if successful
  */
 HAL_StatusTypeDef mcp42u83_set_wiper(mcp42u83_dev *dev, mcp42u83_pot_channel channel,
-                                      uint8_t position);
+                                      uint16_t position);
 
 /**
  * @brief Set wiper position for both potentiometers simultaneously
  * 
  * @param dev Pointer to device structure
- * @param position Wiper position (0-255)
+ * @param position Wiper position (0-1023)
  * @return HAL_StatusTypeDef HAL_OK if successful
  */
-HAL_StatusTypeDef mcp42u83_set_both_wipers(mcp42u83_dev *dev, uint8_t position);
+HAL_StatusTypeDef mcp42u83_set_both_wipers(mcp42u83_dev *dev, uint16_t position);
 
 /**
  * @brief Set wiper positions for both potentiometers independently
  * 
  * @param dev Pointer to device structure
- * @param pos0 Wiper position for potentiometer 0 (0-255)
- * @param pos1 Wiper position for potentiometer 1 (0-255)
+ * @param pos0 Wiper position for potentiometer 0 (0-1023)
+ * @param pos1 Wiper position for potentiometer 1 (0-1023)
  * @return HAL_StatusTypeDef HAL_OK if successful
  */
-HAL_StatusTypeDef mcp42u83_set_wipers(mcp42u83_dev *dev, uint8_t pos0, uint8_t pos1);
+HAL_StatusTypeDef mcp42u83_set_wipers(mcp42u83_dev *dev, uint16_t pos0, uint16_t pos1);
 
 /**
  * @brief Get cached wiper position for a specific potentiometer
  * 
  * @param dev Pointer to device structure
  * @param channel Potentiometer channel (POT_0 or POT_1)
- * @return uint8_t Current wiper position (0-255)
+ * @return uint16_t Current wiper position (0-1023)
  */
-uint8_t mcp42u83_get_wiper(const mcp42u83_dev *dev, mcp42u83_pot_channel channel);
+uint16_t mcp42u83_get_wiper(mcp42u83_dev *dev, mcp42u83_pot_channel channel);
 
 /**
  * @brief Shutdown specific potentiometer channel
@@ -145,29 +164,29 @@ HAL_StatusTypeDef mcp42u83_shutdown_both(mcp42u83_dev *dev);
  * 
  * @param dev Pointer to device structure
  * @param channel Potentiometer channel to wake up (POT_0 or POT_1)
- * @param position Initial wiper position (0-255)
+ * @param position Initial wiper position (0-1023)
  * @return HAL_StatusTypeDef HAL_OK if successful
  */
 HAL_StatusTypeDef mcp42u83_wakeup(mcp42u83_dev *dev, mcp42u83_pot_channel channel,
-                                   uint8_t position);
+                                   uint16_t position);
 
 /**
  * @brief Calculate resistance for a given wiper position
  * 
  * @param dev Pointer to device structure
- * @param position Wiper position (0-255)
+ * @param position Wiper position (0-1023)
  * @return float Resistance in kΩ (RAW to wiper)
  */
-float mcp42u83_position_to_resistance(const mcp42u83_dev *dev, uint8_t position);
+float mcp42u83_position_to_resistance(const mcp42u83_dev *dev, uint16_t position);
 
 /**
  * @brief Calculate wiper position for a desired resistance
  * 
  * @param dev Pointer to device structure
  * @param resistance_kohm Desired resistance in kΩ
- * @return uint8_t Wiper position (0-255)
+ * @return uint16_t Wiper position (0-1023)
  */
-uint8_t mcp42u83_resistance_to_position(const mcp42u83_dev *dev, float resistance_kohm);
+uint16_t mcp42u83_resistance_to_position(const mcp42u83_dev *dev, float resistance_kohm);
 
 /**
  * @brief Set resistance for a specific potentiometer

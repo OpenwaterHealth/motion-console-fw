@@ -378,16 +378,17 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_WIPER:
             uartResp->command = OW_CTRL_MCP42_SET_WIPER;
-            if (cmd->data_len != 2) {
+            if (cmd->data_len != 3) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             } else {
                 uint8_t ch = cmd->data[0];
-                uint8_t pos = cmd->data[1];
+                uint16_t pos = 0;
+                memcpy(&pos, &cmd->data[1], sizeof(uint16_t));
                 if (mcp42u83_set_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch, pos) == HAL_OK) {
-                    uartResp->data_len = 1;
-                    uartResp->data = &pos;
+                    uartResp->data_len = 2;
+                    uartResp->data = &cmd->data[1];
                 } else {
                     uartResp->packet_type = OW_ERROR;
                     uartResp->data_len = 0;
@@ -397,15 +398,16 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_BOTH:
             uartResp->command = OW_CTRL_MCP42_SET_BOTH;
-            if (cmd->data_len != 1) {
+            if (cmd->data_len != 2) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             } else {
-                uint8_t pos = cmd->data[0];
+                uint16_t pos = 0;
+                memcpy(&pos, &cmd->data[0], sizeof(uint16_t));
                 if (mcp42u83_set_both_wipers(&mcp42u83_device, pos) == HAL_OK) {
-                    uartResp->data_len = 1;
-                    uartResp->data = &pos;
+                    uartResp->data_len = 2;
+                    uartResp->data = cmd->data;
                 } else {
                     uartResp->packet_type = OW_ERROR;
                     uartResp->data_len = 0;
@@ -415,15 +417,17 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_WIPERS:
             uartResp->command = OW_CTRL_MCP42_SET_WIPERS;
-            if (cmd->data_len != 2) {
+            if (cmd->data_len != 4) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             } else {
-                uint8_t pos0 = cmd->data[0];
-                uint8_t pos1 = cmd->data[1];
+                uint16_t pos0 = 0;
+                uint16_t pos1 = 0;
+                memcpy(&pos0, &cmd->data[0], sizeof(uint16_t));
+                memcpy(&pos1, &cmd->data[2], sizeof(uint16_t));
                 if (mcp42u83_set_wipers(&mcp42u83_device, pos0, pos1) == HAL_OK) {
-                    uartResp->data_len = 2;
+                    uartResp->data_len = 4;
                     uartResp->data = cmd->data;
                 } else {
                     uartResp->packet_type = OW_ERROR;
@@ -439,10 +443,12 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             } else {
+                static uint8_t mcp42_resp_buf[2];
                 uint8_t ch = cmd->data[0];
-                uint8_t pos = mcp42u83_get_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch);
-                uartResp->data_len = 1;
-                uartResp->data = &pos;
+                uint16_t pos = mcp42u83_get_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch);
+                memcpy(mcp42_resp_buf, &pos, sizeof(uint16_t));
+                uartResp->data_len = 2;
+                uartResp->data = mcp42_resp_buf;
             }
             break;
         case OW_CTRL_MCP42_SHUTDOWN:
@@ -466,13 +472,14 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_WAKEUP:
             uartResp->command = OW_CTRL_MCP42_WAKEUP;
-            if (cmd->data_len != 2) {
+            if (cmd->data_len != 3) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             } else {
                 uint8_t ch = cmd->data[0];
-                uint8_t pos = cmd->data[1];
+                uint16_t pos = 0;
+                memcpy(&pos, &cmd->data[1], sizeof(uint16_t));
                 if (mcp42u83_wakeup(&mcp42u83_device, (mcp42u83_pot_channel)ch, pos) != HAL_OK) {
                     uartResp->packet_type = OW_ERROR;
                 }

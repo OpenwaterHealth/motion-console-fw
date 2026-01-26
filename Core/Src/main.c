@@ -416,8 +416,10 @@ int main(void)
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
-  mcp42u83_device.hi2c = &hi2c1;
-  mcp42u83_device.i2c_addr = 0x58;
+  // initialize digital potentiometer
+  if (mcp42u83_init(&mcp42u83_device, NULL, NULL, 0, &hi2c1, 0x58, MCP42U83_R_AB_5K, 100) != HAL_OK) {
+    printf("Failed to initialize MCP42U83\r\n");
+  }
 
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
