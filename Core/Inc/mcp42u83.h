@@ -32,6 +32,7 @@ extern "C" {
 /* Maximum wiper position (10-bit) */
 #define MCP42U83_MAX_POSITION       1023
 #define MCP42U83_MID_POSITION       512
+#define MCP42U83_DEFAULT_POSITION   154
 #define MCP42U83_MIN_POSITION       0
 
 /* Number of potentiometers */

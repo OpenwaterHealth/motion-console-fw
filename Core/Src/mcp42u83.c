@@ -212,8 +212,8 @@ HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
     dev->resistance_kohm = mcp42u83_resistance_option_to_kohm(resistance);
     
     // Initialize wiper positions to mid-scale
-    dev->wiper_pos[MCP42U83_POT_0] = MCP42U83_MID_POSITION;
-    dev->wiper_pos[MCP42U83_POT_1] = MCP42U83_MID_POSITION;
+    dev->wiper_pos[MCP42U83_POT_0] = MCP42U83_DEFAULT_POSITION;
+    dev->wiper_pos[MCP42U83_POT_1] = MCP42U83_DEFAULT_POSITION;
     
     // Validate mutually exclusive bus selection
     if ((dev->hspi != NULL && dev->hi2c != NULL) || (dev->hspi == NULL && dev->hi2c == NULL)) {
@@ -226,7 +226,7 @@ HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
     }
 
     // Initialize device wipers to mid-scale on the selected bus
-    return mcp42u83_set_both_wipers(dev, MCP42U83_MID_POSITION);
+    return mcp42u83_set_both_wipers(dev, MCP42U83_DEFAULT_POSITION);
 }
 
 /**
