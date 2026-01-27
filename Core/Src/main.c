@@ -346,7 +346,7 @@ int main(void)
 
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
 
-  LED_RGB_SET(1); // RED - starting up
+  LED_RGB_SET(LED_RED); // RED - starting up
 
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
@@ -453,7 +453,7 @@ int main(void)
   comms_init();
 
 
-  LED_RGB_SET(3); // Green - happy
+  LED_RGB_SET(LED_GREEN); // Green - happy
 
   /* USER CODE END RTOS_THREADS */
 
@@ -1572,7 +1572,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
 
-  LED_RGB_SET(1); // Red - error
+  LED_RGB_SET(LED_RED); // Red - error
 
   __disable_irq();
   while (1)
