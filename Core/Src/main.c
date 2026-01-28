@@ -417,7 +417,7 @@ int main(void)
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
   // initialize digital potentiometer
-  if (mcp42u83_init(&mcp42u83_device, NULL, NULL, 0, &hi2c1, 0x58, MCP42U83_R_AB_5K, 100) != HAL_OK) {
+  if (mcp42u83_init(&mcp42u83_device, NULL, NULL, 0, &hi2c1, MCP42U83_I2C_ADRESS, MCP42U83_R_AB_5K, 100) != HAL_OK) {
     printf("Failed to initialize MCP42U83\r\n");
   }
 
