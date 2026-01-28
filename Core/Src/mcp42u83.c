@@ -120,7 +120,7 @@ static HAL_StatusTypeDef mcp42u83_write_register(mcp42u83_dev *dev, uint8_t reg_
     uint8_t data_hi = (uint8_t)((value >> 8) & 0x03);
     uint8_t data_lo = (uint8_t)(value & 0xFF);
 
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
 
@@ -164,7 +164,7 @@ static HAL_StatusTypeDef mcp42u83_step_wiper(mcp42u83_dev *dev, uint8_t reg_addr
     uint8_t cmd_byte = mcp42u83_build_cmd(reg_addr, cmd);
     uint16_t i;
 
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
 
@@ -197,11 +197,13 @@ HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
                                  mcp42u83_resistance_option resistance,
                                  uint32_t timeout_ms)
 {
-    if (dev == NULL || hspi == NULL || cs_port == NULL) {
-        // legacy SPI-only check removed: we'll validate below
-        ;
+    if (dev == NULL) {
+        return HAL_ERROR;
     }
-    
+
+    /* Start in not-initialized state; driver manages this field. */
+    dev->state = MCP42U83_DRIVER_STATE_NOT_INITIALIZED;
+
     // Initialize device structure
     dev->hspi = hspi;
     dev->cs_port = cs_port;
@@ -217,6 +219,7 @@ HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
     
     // Validate mutually exclusive bus selection
     if ((dev->hspi != NULL && dev->hi2c != NULL) || (dev->hspi == NULL && dev->hi2c == NULL)) {
+        dev->state = MCP42U83_DRIVER_STATE_ERROR;
         return HAL_ERROR; // must provide exactly one bus
     }
 
@@ -224,9 +227,16 @@ HAL_StatusTypeDef mcp42u83_init(mcp42u83_dev *dev, SPI_HandleTypeDef *hspi,
         // Set CS high (inactive)
         cs_high(dev);
     }
+    
+    dev->state = MCP42U83_DRIVER_STATE_READY;
 
     // Initialize device wipers to mid-scale on the selected bus
-    return mcp42u83_set_both_wipers(dev, MCP42U83_DEFAULT_POSITION);
+    HAL_StatusTypeDef status = mcp42u83_set_both_wipers(dev, MCP42U83_DEFAULT_POSITION);
+    if (status != HAL_OK) {
+        dev->state = MCP42U83_DRIVER_STATE_ERROR;
+    }
+
+    return status;
 }
 
 /**
@@ -238,7 +248,7 @@ HAL_StatusTypeDef mcp42u83_set_wiper(mcp42u83_dev *dev, mcp42u83_pot_channel cha
     HAL_StatusTypeDef status;
     uint8_t reg_addr;
     
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
     
@@ -268,7 +278,7 @@ HAL_StatusTypeDef mcp42u83_set_wiper(mcp42u83_dev *dev, mcp42u83_pot_channel cha
 HAL_StatusTypeDef mcp42u83_set_both_wipers(mcp42u83_dev *dev, uint16_t position)
 {
     HAL_StatusTypeDef status;
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
 
@@ -297,7 +307,7 @@ HAL_StatusTypeDef mcp42u83_set_wipers(mcp42u83_dev *dev, uint16_t pos0, uint16_t
 {
     HAL_StatusTypeDef status;
     
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
     
@@ -321,7 +331,7 @@ uint16_t mcp42u83_get_wiper(mcp42u83_dev *dev, mcp42u83_pot_channel channel)
     uint16_t value = 0;
     uint8_t reg_addr;
 
-    if (dev == NULL || channel >= MCP42U83_NUM_POTS) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY || channel >= MCP42U83_NUM_POTS) {
         return 0;
     }
 
@@ -341,7 +351,7 @@ HAL_StatusTypeDef mcp42u83_shutdown(mcp42u83_dev *dev, mcp42u83_pot_channel chan
     uint16_t tcon = 0;
     uint16_t mask = 0;
 
-    if (dev == NULL || channel >= MCP42U83_NUM_POTS) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY || channel >= MCP42U83_NUM_POTS) {
         return HAL_ERROR;
     }
 
@@ -366,7 +376,7 @@ HAL_StatusTypeDef mcp42u83_shutdown_both(mcp42u83_dev *dev)
 {
     uint16_t tcon = 0;
 
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
 
@@ -389,7 +399,7 @@ HAL_StatusTypeDef mcp42u83_wakeup(mcp42u83_dev *dev, mcp42u83_pot_channel channe
     uint16_t tcon = 0;
     uint16_t mask = 0;
 
-    if (dev == NULL || channel >= MCP42U83_NUM_POTS) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY || channel >= MCP42U83_NUM_POTS) {
         return HAL_ERROR;
     }
 
@@ -422,7 +432,7 @@ HAL_StatusTypeDef mcp42u83_wakeup(mcp42u83_dev *dev, mcp42u83_pot_channel channe
  */
 float mcp42u83_position_to_resistance(const mcp42u83_dev *dev, uint16_t position)
 {
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return 0.0f;
     }
 
@@ -441,7 +451,7 @@ float mcp42u83_position_to_resistance(const mcp42u83_dev *dev, uint16_t position
  */
 uint16_t mcp42u83_resistance_to_position(const mcp42u83_dev *dev, float resistance_kohm)
 {
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return 0;
     }
     
@@ -473,7 +483,7 @@ HAL_StatusTypeDef mcp42u83_set_resistance(mcp42u83_dev *dev, mcp42u83_pot_channe
 {
     uint16_t position;
     
-    if (dev == NULL) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY) {
         return HAL_ERROR;
     }
     
@@ -494,7 +504,7 @@ HAL_StatusTypeDef mcp42u83_increment(mcp42u83_dev *dev, mcp42u83_pot_channel cha
     uint32_t new_pos;
     uint8_t reg_addr;
     
-    if (dev == NULL || channel >= MCP42U83_NUM_POTS) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY || channel >= MCP42U83_NUM_POTS) {
         return HAL_ERROR;
     }
     
@@ -528,7 +538,7 @@ HAL_StatusTypeDef mcp42u83_decrement(mcp42u83_dev *dev, mcp42u83_pot_channel cha
     int32_t new_pos;
     uint8_t reg_addr;
     
-    if (dev == NULL || channel >= MCP42U83_NUM_POTS) {
+    if (dev == NULL || dev->state != MCP42U83_DRIVER_STATE_READY || channel >= MCP42U83_NUM_POTS) {
         return HAL_ERROR;
     }
     

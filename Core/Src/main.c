@@ -94,7 +94,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 4};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 5};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -418,7 +418,7 @@ int main(void)
 
   // initialize digital potentiometer
   if (mcp42u83_init(&mcp42u83_device, NULL, NULL, 0, &hi2c1, MCP42U83_I2C_ADRESS, MCP42U83_R_AB_5K, 100) != HAL_OK) {
-    printf("Failed to initialize MCP42U83\r\n");
+    printf("Failed to initialize MCP42U83\r\n");    
   }
 
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);

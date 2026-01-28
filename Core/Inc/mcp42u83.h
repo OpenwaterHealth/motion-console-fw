@@ -60,6 +60,18 @@ typedef enum {
 } mcp42u83_resistance_option;
 
 /**
+ * @brief MCP42U83 resistance options (kΩ)
+ */
+typedef enum {
+    /** Driver not initialized / not ready */
+    MCP42U83_DRIVER_STATE_NOT_INITIALIZED = 0,
+    /** Driver initialized and ready for use */
+    MCP42U83_DRIVER_STATE_READY,
+    /** Driver encountered an error */
+    MCP42U83_DRIVER_STATE_ERROR,
+} mcp42u83_driver_state;
+
+/**
  * @brief MCP42U83 device structure
  */
 typedef struct {
@@ -71,6 +83,8 @@ typedef struct {
     float resistance_kohm;         // Total resistance in kΩ (5/10/20/50/100kΩ)
     I2C_HandleTypeDef *hi2c;      // I2C handle (set for I2C mode)
     uint16_t i2c_addr;            // 7-bit I2C address (I2C mode)
+    /* Driver-managed state. Do not set this field manually. */
+    mcp42u83_driver_state state;
 } mcp42u83_dev;
 
 /**
