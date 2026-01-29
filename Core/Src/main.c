@@ -268,8 +268,8 @@ int main(void)
 
   DWT_Init();
 
-  // HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
-  // HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
+  //HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
+  //HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
   HAL_GPIO_WritePin(SCL_CFG_GPIO_Port, SCL_CFG_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(SDA_REM_GPIO_Port, SDA_REM_Pin, GPIO_PIN_RESET);
 
@@ -1549,15 +1549,40 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM15) {
-	HAL_TIM_Base_Stop_IT(htim);
-	if(_enter_dfu) {
+    HAL_TIM_Base_Stop_IT(htim);
+    if(_enter_dfu) {
+      *((uint32_t *)0x38000000) = 0xDEADBEEF; 
+    }
 
-	}
+    // Stop and De-initialize Timers
+    HAL_TIM_Base_DeInit(&htim1);
+    HAL_TIM_Base_DeInit(&htim3);
+    HAL_TIM_Base_DeInit(&htim12);
+    HAL_TIM_Base_DeInit(&htim15);
+    HAL_TIM_Base_DeInit(&htim2);
 
-	MX_USB_DEVICE_DeInit();
-	delay_ms(300);
-	// Reset the board
-	NVIC_SystemReset();
+    // De-initialize I2C interfaces
+    HAL_I2C_DeInit(&hi2c1);
+    HAL_I2C_DeInit(&hi2c2);
+    HAL_I2C_DeInit(&hi2c4);
+
+    // De-initialize SPI interfaces
+    HAL_SPI_DeInit(&hspi1);
+    HAL_SPI_DeInit(&hspi2);
+    HAL_SPI_DeInit(&hspi3);
+    HAL_SPI_DeInit(&hspi4);
+
+    // De-initialize UART
+    HAL_UART_DeInit(&huart4);
+
+    // De-initialize other specific modules
+    HAL_RNG_DeInit(&hrng);
+    HAL_CRC_DeInit(&hcrc);
+    
+    MX_USB_DEVICE_DeInit();
+    delay_ms(300);
+    // Reset the board
+    NVIC_SystemReset();
 
   }
 

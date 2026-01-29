@@ -177,8 +177,62 @@
   * @param  None
   * @retval None
   */
+
+void CheckBootloaderFlag(void) {
+    if (*((uint32_t *)0x38000000) == 0xDEADBEEF) {
+        *((uint32_t *)0x38000000) = 0; // Clear flag
+        
+
+        SysTick->CTRL = 0;
+        SysTick->LOAD = 0;
+        SysTick->VAL = 0;
+        
+        // Clear all interrupt enable and pending registers
+        for (int i = 0; i < 8; i++) {
+            NVIC->ICER[i] = 0xFFFFFFFF;
+            NVIC->ICPR[i] = 0xFFFFFFFF;
+        }
+
+        // 2. De-initialize specific peripherals used by your application
+        // Example for USB device and UART (adjust for your specific usage):
+        // if (hUsbDeviceFS.pClass != NULL) {
+        //     USBD_DeInit(&hUsbDeviceFS); // Essential for USB DFU
+        // }
+        // HAL_UART_MspDeInit(&huart2); // Example for UART2
+
+        // 3. Reset the clock configuration to the default HSI state
+        // This is crucial as the bootloader expects default clocks.
+        HAL_RCC_DeInit();
+
+        // 4. Reset all peripherals to their power-on defaults 
+        // Note: HAL_DeInit() may cause a spontaneous MCU reset on some H7 versions.
+        HAL_DeInit(); 
+        
+        // 5. Clean and Disable Caches/MPU (STM32H7 specific)
+        #if defined (SCB_CleanDCache) && defined (SCB_DisableDCache) && defined (SCB_DisableICache)
+            SCB_CleanDCache();
+            SCB_DisableDCache();
+            SCB_DisableICache();
+        #endif
+        // --- 2. Configure Hub specific GPIOs ---
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+        // Set up the jump to System Memory (0x1FF09800 for H743)
+        // Corrected Base Address: 0x1FF09800
+        uint32_t JumpAddress = *(__IO uint32_t*)(0x1FF09800 + 4); 
+        void (*pJump)(void) = (void (*)(void)) JumpAddress;
+        
+        // Initialize user application's Stack Pointer
+        __set_MSP(*(__IO uint32_t*) 0x1FF09800);
+        pJump();
+    }
+}
+
 void SystemInit (void)
 {
+  CheckBootloaderFlag();
 #if defined (DATA_IN_D2_SRAM)
  __IO uint32_t tmpreg;
 #endif /* DATA_IN_D2_SRAM */
