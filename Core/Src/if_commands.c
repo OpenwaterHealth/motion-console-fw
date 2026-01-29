@@ -443,7 +443,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
                 uartResp->data = NULL;
                 break;
             }
-            
+
             if (cmd->data_len != 4) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -488,6 +488,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SHUTDOWN:
             uartResp->command = OW_CTRL_MCP42_SHUTDOWN;
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
             if (cmd->data_len != 1) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -507,6 +514,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_WAKEUP:
             uartResp->command = OW_CTRL_MCP42_WAKEUP;
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
             if (cmd->data_len != 3) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -522,6 +536,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_RES:
             uartResp->command = OW_CTRL_MCP42_SET_RES;
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
             if (cmd->data_len != 5) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -537,6 +558,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_INC:
             uartResp->command = OW_CTRL_MCP42_INC;
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
             if (cmd->data_len != 2) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -551,6 +579,13 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_DEC:
             uartResp->command = OW_CTRL_MCP42_DEC;
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
             if (cmd->data_len != 2) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
