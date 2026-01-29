@@ -378,6 +378,15 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_WIPER:
             uartResp->command = OW_CTRL_MCP42_SET_WIPER;
+            
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
+
             if (cmd->data_len != 3) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -398,17 +407,26 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_BOTH:
             uartResp->command = OW_CTRL_MCP42_SET_BOTH;
+            
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
+
             if (cmd->data_len != 2) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             } else {
                 uint16_t pos = 0;
-                memcpy(&pos, &cmd->data[0], sizeof(uint16_t));
+                memcpy(&pos, &cmd->data[0], sizeof(uint16_t)); 
                 if (mcp42u83_set_both_wipers(&mcp42u83_device, pos) == HAL_OK) {
                     uartResp->data_len = 2;
                     uartResp->data = cmd->data;
-                } else {
+                } else {               
                     uartResp->packet_type = OW_ERROR;
                     uartResp->data_len = 0;
                     uartResp->data = NULL;
@@ -417,6 +435,15 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_SET_WIPERS:
             uartResp->command = OW_CTRL_MCP42_SET_WIPERS;
+            
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
+            
             if (cmd->data_len != 4) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -438,6 +465,14 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_MCP42_GET_WIPER:
             uartResp->command = OW_CTRL_MCP42_GET_WIPER;
+            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
+            
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+                break;
+            }
+
             if (cmd->data_len != 1) {
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
@@ -445,7 +480,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             } else {
                 static uint8_t mcp42_resp_buf[2];
                 uint8_t ch = cmd->data[0];
-                uint16_t pos = mcp42u83_get_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch);
+                uint16_t pos = mcp42u83_get_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch);                                
                 memcpy(mcp42_resp_buf, &pos, sizeof(uint16_t));
                 uartResp->data_len = 2;
                 uartResp->data = mcp42_resp_buf;

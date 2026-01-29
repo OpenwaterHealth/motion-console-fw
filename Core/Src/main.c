@@ -371,9 +371,10 @@ int main(void)
   //printf("I2C2\r\n");
   //I2C_scan(&hi2c2, NULL, 0, true);
 
-  printf("I2C4\r\n");
-  I2C_scan(&hi2c4, NULL, 0, true);
-
+  //printf("I2C4\r\n");
+  //I2C_scan(&hi2c4, NULL, 0, true);
+  TCA9548A_SelectChannel(0, 3);
+  I2C_scan(&hi2c1, NULL, 0, true);
 #endif
 
   // setup PDU monitor
@@ -417,6 +418,7 @@ int main(void)
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
   // initialize digital potentiometer
+  TCA9548A_SelectChannel(0, 3);
   if (mcp42u83_init(&mcp42u83_device, NULL, NULL, 0, &hi2c1, MCP42U83_I2C_ADRESS, MCP42U83_R_AB_5K, 100) != HAL_OK) {
     printf("Failed to initialize MCP42U83\r\n");    
   }

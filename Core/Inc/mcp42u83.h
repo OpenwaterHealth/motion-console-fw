@@ -81,7 +81,7 @@ typedef struct {
     uint32_t timeout_ms;           // communication timeout in milliseconds
     uint16_t wiper_pos[MCP42U83_NUM_POTS];  // Current wiper positions (cached)
     float resistance_kohm;         // Total resistance in kΩ (5/10/20/50/100kΩ)
-    I2C_HandleTypeDef *hi2c;      // I2C handle (set for I2C mode)
+    I2C_HandleTypeDef *hi2c;      // I2C handle (set for I2C mode)    
     uint16_t i2c_addr;            // 7-bit I2C address (I2C mode)
     /* Driver-managed state. Do not set this field manually. */
     mcp42u83_driver_state state;
