@@ -29,4 +29,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: motion-console-fw
-          path: build/Debug/*.hex
+          path: |
+            build/Debug/*.hex
+            build/Debug/*.bin
