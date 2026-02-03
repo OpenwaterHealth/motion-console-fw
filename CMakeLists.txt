@@ -63,6 +63,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/XO2_api.c
     Core/Src/if_commands.c
     Core/Src/uart_comms.c
+    Core/Src/flash_eeprom.c
     Core/Src/utils.c
 )
 
