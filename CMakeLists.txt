@@ -64,6 +64,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/if_commands.c
     Core/Src/uart_comms.c
     Core/Src/flash_eeprom.c
+    Core/Src/motion_config.c
     Core/Src/utils.c
 )
 
