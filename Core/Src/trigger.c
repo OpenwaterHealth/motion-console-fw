@@ -7,6 +7,7 @@
 
 #include "main.h"
 #include "trigger.h"
+#include "usb_events.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -18,6 +19,8 @@ Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
 
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
+
+volatile uint8_t _usb_trigger_interlock = 0;
 
 static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
@@ -119,6 +122,24 @@ static void updateTimerDataFromPeripheral()
 	 trigger_config.TriggerStatus = TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 }
 
+static void trigger_usb_disconnect_cb(void)
+{
+    _usb_trigger_interlock = 1;
+    Trigger_Stop();
+    printf("USB Disconnected\r\n");
+}
+
+static void trigger_usb_connect_cb(void)
+{
+    _usb_trigger_interlock = 0;
+    printf("USB Connected\r\n");
+}
+
+void trigger_init(void)
+{
+    usb_register_disconnect_callback(trigger_usb_disconnect_cb);
+    usb_register_connect_callback(trigger_usb_connect_cb);
+}
 
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     if (config == NULL) {
@@ -173,7 +194,9 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
 
 
 HAL_StatusTypeDef Trigger_Start() {
-
+    if(_usb_trigger_interlock){
+        return HAL_ERROR;
+    }
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, trigger_config.EnableSyncOut? GPIO_PIN_RESET:GPIO_PIN_SET); // fsync out
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, trigger_config.EnableTaTrigger? GPIO_PIN_RESET:GPIO_PIN_SET); // TA Trigger enable
 

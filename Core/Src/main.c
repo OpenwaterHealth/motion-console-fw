@@ -94,7 +94,7 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 6};
+uint8_t FIRMWARE_VERSION_DATA[3] = {1, 5, 7};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -333,6 +333,8 @@ int main(void)
   HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
   HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
 
+  trigger_init();
+  
   // config trigger timers
   Trigger_Config_t triggerSetup;
   triggerSetup.frequencyHz = 40;
