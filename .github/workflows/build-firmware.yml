@@ -6,6 +6,7 @@ on:
     branches: [ "main", "next" ]
     tags:
       - "v*.*.*"
+      - "pre-v*"
 
 permissions:
   contents: write 
@@ -18,6 +19,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      # ---------------------------
+      # Build Firmware
+      # ---------------------------
       - name: Pull build image
         run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest
 
@@ -30,6 +34,9 @@ jobs:
             ghcr.io/openwaterhealth/stm32-build-env:latest \
             bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
 
+      # ---------------------------
+      # Upload Firmware
+      # ---------------------------
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -41,21 +48,41 @@ jobs:
       # ---------------------------
       # Create GitHub Release (tags only)
       # ---------------------------
+      - name: Detect release type
+        id: reltype
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+
+          if [[ "$TAG_NAME" == pre-v* ]] || [[ "$TAG_NAME" == *"-rc"* ]] || [[ "$TAG_NAME" == *"-beta"* ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+          
       - name: Generate release notes
         if: startsWith(github.ref, 'refs/tags/')
-        id: notes
         run: |
+          : > notes.md
+
+          if [[ "${{ steps.reltype.outputs.prerelease }}" == "true" ]]; then
+            echo "⚠️ **PRE-RELEASE – NOT FOR PRODUCTION**" >> notes.md
+            echo "" >> notes.md
+          fi
+
           PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')
+
           if [ -z "$PREV_TAG" ]; then
-            git log --pretty=format:"- %s" > notes.md
+            git log --pretty=format:"- %s" >> notes.md
           else
-            git log ${PREV_TAG}..HEAD --pretty=format:"- %s" > notes.md
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s" >> notes.md
           fi
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
+          prerelease: ${{ steps.reltype.outputs.prerelease }}
+          name: ${{ github.ref_name }}
           body_path: notes.md
           files: |
             build/Debug/*.hex
