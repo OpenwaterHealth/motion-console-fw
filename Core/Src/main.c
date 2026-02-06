@@ -32,7 +32,6 @@
 #include "pca9535.h"
 #include "ads7828.h"
 #include "ads7924.h"
-#include "mcp42u83.h"
 #include "fan_driver.h"
 #include "ad5761r.h"
 #include "XO2_dev.h"
@@ -106,7 +105,6 @@ ADS7924_HandleTypeDef tec_ads;
 extern bool ad5761r_enabled;
 extern FAN_Driver fan;
 extern MachSTM_Handle_t machSTM_hdl;
-extern mcp42u83_dev mcp42u83_device;
 
 ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
@@ -419,12 +417,7 @@ int main(void)
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
-  // initialize digital potentiometer
-  TCA9548A_SelectChannel(0, 3);
-  if (mcp42u83_init(&mcp42u83_device, NULL, NULL, 0, &hi2c1, MCP42U83_I2C_ADRESS, MCP42U83_R_AB_5K, 100) != HAL_OK) {
-    printf("Failed to initialize MCP42U83\r\n");    
-  }
-
+  // Enable USB HUB
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
 

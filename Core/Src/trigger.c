@@ -126,13 +126,11 @@ static void trigger_usb_disconnect_cb(void)
 {
     _usb_trigger_interlock = 1;
     Trigger_Stop();
-    printf("USB Disconnected\r\n");
 }
 
 static void trigger_usb_connect_cb(void)
 {
     _usb_trigger_interlock = 0;
-    printf("USB Connected\r\n");
 }
 
 void trigger_init(void)

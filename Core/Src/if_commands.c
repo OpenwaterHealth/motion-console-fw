@@ -16,7 +16,7 @@
 #include "ads7924.h"
 #include "max31875.h"
 #include "led_driver.h"
-#include "mcp42u83.h"
+#include "motion_config.h"
 
 #include <string.h>
 
@@ -39,8 +39,6 @@ static PDUFrame_t pdu_frame;
 
 extern ADS7924_HandleTypeDef tec_ads;
 extern ADS7828_HandleTypeDef adc_mon[2];
-
-extern mcp42u83_dev mcp42u83_device;
 
 extern FAN_Driver fan;
 extern uint8_t FIRMWARE_VERSION_DATA[3];
@@ -376,228 +374,6 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->data_len = (uint16_t)sizeof(pdu_frame);
             uartResp->data = pdu_frame.bytes;
             break;
-        case OW_CTRL_MCP42_SET_WIPER:
-            uartResp->command = OW_CTRL_MCP42_SET_WIPER;
-            
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-
-            if (cmd->data_len != 3) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint8_t ch = cmd->data[0];
-                uint16_t pos = 0;
-                memcpy(&pos, &cmd->data[1], sizeof(uint16_t));
-                if (mcp42u83_set_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch, pos) == HAL_OK) {
-                    uartResp->data_len = 2;
-                    uartResp->data = &cmd->data[1];
-                } else {
-                    uartResp->packet_type = OW_ERROR;
-                    uartResp->data_len = 0;
-                    uartResp->data = NULL;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_SET_BOTH:
-            uartResp->command = OW_CTRL_MCP42_SET_BOTH;
-            
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-
-            if (cmd->data_len != 2) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint16_t pos = 0;
-                memcpy(&pos, &cmd->data[0], sizeof(uint16_t)); 
-                if (mcp42u83_set_both_wipers(&mcp42u83_device, pos) == HAL_OK) {
-                    uartResp->data_len = 2;
-                    uartResp->data = cmd->data;
-                } else {               
-                    uartResp->packet_type = OW_ERROR;
-                    uartResp->data_len = 0;
-                    uartResp->data = NULL;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_SET_WIPERS:
-            uartResp->command = OW_CTRL_MCP42_SET_WIPERS;
-            
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-
-            if (cmd->data_len != 4) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint16_t pos0 = 0;
-                uint16_t pos1 = 0;
-                memcpy(&pos0, &cmd->data[0], sizeof(uint16_t));
-                memcpy(&pos1, &cmd->data[2], sizeof(uint16_t));
-                if (mcp42u83_set_wipers(&mcp42u83_device, pos0, pos1) == HAL_OK) {
-                    uartResp->data_len = 4;
-                    uartResp->data = cmd->data;
-                } else {
-                    uartResp->packet_type = OW_ERROR;
-                    uartResp->data_len = 0;
-                    uartResp->data = NULL;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_GET_WIPER:
-            uartResp->command = OW_CTRL_MCP42_GET_WIPER;
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-
-            if (cmd->data_len != 1) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                static uint8_t mcp42_resp_buf[2];
-                uint8_t ch = cmd->data[0];
-                uint16_t pos = mcp42u83_get_wiper(&mcp42u83_device, (mcp42u83_pot_channel)ch);                                
-                memcpy(mcp42_resp_buf, &pos, sizeof(uint16_t));
-                uartResp->data_len = 2;
-                uartResp->data = mcp42_resp_buf;
-            }
-            break;
-        case OW_CTRL_MCP42_SHUTDOWN:
-            uartResp->command = OW_CTRL_MCP42_SHUTDOWN;
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-            if (cmd->data_len != 1) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint8_t ch = cmd->data[0];
-                HAL_StatusTypeDef st;
-                if (ch == 3) {
-                    st = mcp42u83_shutdown_both(&mcp42u83_device);
-                } else {
-                    st = mcp42u83_shutdown(&mcp42u83_device, (mcp42u83_pot_channel)ch);
-                }
-                if (st != HAL_OK) {
-                    uartResp->packet_type = OW_ERROR;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_WAKEUP:
-            uartResp->command = OW_CTRL_MCP42_WAKEUP;
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-            if (cmd->data_len != 3) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint8_t ch = cmd->data[0];
-                uint16_t pos = 0;
-                memcpy(&pos, &cmd->data[1], sizeof(uint16_t));
-                if (mcp42u83_wakeup(&mcp42u83_device, (mcp42u83_pot_channel)ch, pos) != HAL_OK) {
-                    uartResp->packet_type = OW_ERROR;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_SET_RES:
-            uartResp->command = OW_CTRL_MCP42_SET_RES;
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-            if (cmd->data_len != 5) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint8_t ch = cmd->data[0];
-                float res = 0.0f;
-                memcpy(&res, &cmd->data[1], sizeof(float));
-                if (mcp42u83_set_resistance(&mcp42u83_device, (mcp42u83_pot_channel)ch, res) != HAL_OK) {
-                    uartResp->packet_type = OW_ERROR;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_INC:
-            uartResp->command = OW_CTRL_MCP42_INC;
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-            if (cmd->data_len != 2) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint8_t ch = cmd->data[0];
-                uint8_t steps = cmd->data[1];
-                if (mcp42u83_increment(&mcp42u83_device, (mcp42u83_pot_channel)ch, steps) != HAL_OK) {
-                    uartResp->packet_type = OW_ERROR;
-                }
-            }
-            break;
-        case OW_CTRL_MCP42_DEC:
-            uartResp->command = OW_CTRL_MCP42_DEC;
-            if(TCA9548A_SelectChannel(0, 3) != TCA9548A_OK){
-            
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-                break;
-            }
-            if (cmd->data_len != 2) {
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            } else {
-                uint8_t ch = cmd->data[0];
-                uint8_t steps = cmd->data[1];
-                if (mcp42u83_decrement(&mcp42u83_device, (mcp42u83_pot_channel)ch, steps) != HAL_OK) {
-                    uartResp->packet_type = OW_ERROR;
-                }
-            }
-            break;
         default:
             uartResp->data_len = 0;
             uartResp->packet_type = OW_UNKNOWN;
@@ -641,6 +417,57 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->data = (uint8_t *)&id_words;
             break;
         case OW_CMD_TOGGLE_LED:
+            break;
+        case OW_CMD_USR_CFG:
+            // reserved == 0: READ
+            // reserved == 1: WRITE (cmd->data is JSON text)
+            if (cmd->reserved == 0) {
+                const uint8_t *wire_buf = NULL;
+                uint16_t wire_len = 0;
+                const uint16_t max_payload = (uint16_t)(COMMAND_MAX_SIZE - 12U); // framing overhead in txBuffer
+                if (motion_cfg_wire_read(&wire_buf, &wire_len, max_payload) != HAL_OK || wire_buf == NULL) {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+
+                uartResp->data_len = wire_len;
+                uartResp->data = (uint8_t *)wire_buf;
+            }
+            else if (cmd->reserved == 1) {
+                if (cmd->data == NULL || cmd->data_len == 0) {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+
+                if (motion_cfg_wire_write(cmd->data, cmd->data_len) != HAL_OK) {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+
+                // Return the updated header as an ACK payload.
+                const uint8_t *wire_buf = NULL;
+                uint16_t wire_len = 0;
+                const uint16_t max_payload = (uint16_t)(COMMAND_MAX_SIZE - 12U);
+                if (motion_cfg_wire_read(&wire_buf, &wire_len, max_payload) != HAL_OK || wire_buf == NULL) {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+                uartResp->data_len = (uint16_t)sizeof(motion_cfg_wire_hdr_t);
+                uartResp->data = (uint8_t *)wire_buf;
+            }
+            else {
+                uartResp->packet_type = OW_UNKNOWN;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+            }
             break;
         case OW_CMD_RESET:
             uartResp->command = cmd->command;

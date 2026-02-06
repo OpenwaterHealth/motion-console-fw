@@ -325,7 +325,6 @@ void HAL_PCD_ConnectCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
   USBD_LL_DevConnected((USBD_HandleTypeDef*)hpcd->pData);
-  printf("USB Connected\r\n");
 }
 
 /**
@@ -340,7 +339,6 @@ void HAL_PCD_DisconnectCallback(PCD_HandleTypeDef *hpcd)
 #endif /* USE_HAL_PCD_REGISTER_CALLBACKS */
 {
   USBD_LL_DevDisconnected((USBD_HandleTypeDef*)hpcd->pData);
-  printf("USB Disconnected\r\n");
 }
 
 /*******************************************************************************
