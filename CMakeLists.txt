@@ -15,20 +15,38 @@ set(CMAKE_C_EXTENSIONS ON)
 find_package(Git QUIET)
 
 if(GIT_FOUND)
-    execute_process(
-        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_VARIABLE GIT_DESCRIBE
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE FW_GIT_DESCRIBE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+
+  execute_process(
+    COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_VARIABLE FW_GIT_SHA
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
 else()
-    set(GIT_DESCRIBE "unknown")
+  set(FW_GIT_DESCRIBE "unknown")
+  set(FW_GIT_SHA "unknown")
 endif()
 
-message(STATUS "Firmware version: ${GIT_DESCRIBE}")
+
+# ---------------------------
+# Build date/time (UTC)
+# ---------------------------
+string(TIMESTAMP FW_BUILD_TIME_UTC "%Y-%m-%d %H:%M:%S UTC" UTC)
+
+message(STATUS "FW version   : ${FW_GIT_DESCRIBE}")
+message(STATUS "FW git sha   : ${FW_GIT_SHA}")
+message(STATUS "FW build time: ${FW_BUILD_TIME_UTC}")
 
 # Expose to code
-add_compile_definitions(FW_VERSION="${GIT_DESCRIBE}")
+add_compile_definitions(FW_VERSION="${FW_GIT_DESCRIBE}")
+add_compile_definitions(FW_SHA="${FW_GIT_SHA}")
+add_compile_definitions(FW_BUILD_TIME="${FW_BUILD_TIME_UTC}")
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)

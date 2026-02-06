@@ -402,8 +402,8 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
         case OW_CMD_NOP:
             break;
         case OW_CMD_VERSION:
-            uartResp->data_len = sizeof(FIRMWARE_VERSION_DATA);
-            uartResp->data = FIRMWARE_VERSION_DATA;
+            uartResp->data_len = sizeof(FW_VERSION_STRING);
+            uartResp->data = (uint8_t*)FW_VERSION_STRING;
             break;
         case OW_CMD_ECHO:
             uartResp->data_len = cmd->data_len;
