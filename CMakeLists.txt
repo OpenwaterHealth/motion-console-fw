@@ -12,6 +12,23 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS ON)
 
+find_package(Git QUIET)
+
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+else()
+    set(GIT_DESCRIBE "unknown")
+endif()
+
+message(STATUS "Firmware version: ${GIT_DESCRIBE}")
+
+# Expose to code
+add_compile_definitions(FW_VERSION="${GIT_DESCRIBE}")
 
 # Define the build type
 if(NOT CMAKE_BUILD_TYPE)
