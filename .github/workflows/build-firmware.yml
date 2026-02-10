@@ -5,8 +5,8 @@ on:
   push:
     branches: [ "main", "next" ]
     tags:
-      - "v*.*.*"
-      - "pre-v*"
+      - "*.*.*"
+      - "pre-*"
 
 permissions:
   contents: write 
@@ -35,7 +35,7 @@ jobs:
             -w /workspace \
             --workdir /workspace \
             ghcr.io/openwaterhealth/stm32-build-env:latest \
-            bash -lc "git config --global --add safe.directory /workspace && cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
+            bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
 
       # ---------------------------
       # Upload Firmware
@@ -56,7 +56,7 @@ jobs:
         run: |
           TAG_NAME="${GITHUB_REF_NAME}"
 
-          if [[ "$TAG_NAME" == pre-v* ]] || [[ "$TAG_NAME" == *"-rc"* ]] || [[ "$TAG_NAME" == *"-beta"* ]]; then
+          if [[ "$TAG_NAME" == pre-* ]] || [[ "$TAG_NAME" == *"-rc"* ]] || [[ "$TAG_NAME" == *"-beta"* ]]; then
             echo "prerelease=true" >> $GITHUB_OUTPUT
           else
             echo "prerelease=false" >> $GITHUB_OUTPUT
