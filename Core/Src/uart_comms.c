@@ -45,7 +45,6 @@ TaskHandle_t commsTaskHandle;
 extern ConsoleTemperatures consoleTemps;
 
 extern FAN_Driver fan;
-extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
 extern ad5761r_dev tec_dac;
