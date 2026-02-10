@@ -17,6 +17,7 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include "version.h"
 #include "main.h"
 #include "cmsis_os.h"
 #include "usb_device.h"

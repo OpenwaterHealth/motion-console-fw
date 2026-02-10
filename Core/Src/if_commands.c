@@ -4,6 +4,7 @@
  *  Created as refactor target for command processing from uart_comms.c
  */
 
+#include "version.h"
 #include "main.h"
 #include "common.h"
 #include "uart_comms.h"
