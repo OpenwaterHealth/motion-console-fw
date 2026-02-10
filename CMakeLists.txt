@@ -21,6 +21,47 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
+# Generate version.h at configure time (initial)
+find_package(Git QUIET)
+
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --tags --dirty --always
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE FW_GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE GIT_DESCRIBE_RESULT
+    )
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE FW_GIT_SHA
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE GIT_SHA_RESULT
+    )
+    if(NOT GIT_DESCRIBE_RESULT EQUAL 0)
+        set(FW_GIT_DESCRIBE "unknown")
+    endif()
+    if(NOT GIT_SHA_RESULT EQUAL 0)
+        set(FW_GIT_SHA "unknown")
+    endif()
+else()
+    set(FW_GIT_DESCRIBE "unknown")
+    set(FW_GIT_SHA "unknown")
+endif()
+
+string(TIMESTAMP FW_BUILD_TIME_UTC "%Y-%m-%d %H:%M:%S UTC" UTC)
+
+message(STATUS "FW version   : ${FW_GIT_DESCRIBE}")
+message(STATUS "FW git sha   : ${FW_GIT_SHA}")
+message(STATUS "FW build time: ${FW_BUILD_TIME_UTC}")
+
+configure_file(
+    ${CMAKE_SOURCE_DIR}/version.h.in
+    ${CMAKE_BINARY_DIR}/generated/version.h
+    @ONLY
+)
+
 # Set the project name
 set(CMAKE_PROJECT_NAME motion-console-fw)
 
@@ -77,18 +118,6 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
     ${CMAKE_BINARY_DIR}/generated
 )
-
-# ---------------------------
-# Generate version.h on every build
-# ---------------------------
-add_custom_target(version_info ALL
-    COMMAND ${CMAKE_COMMAND}
-        -DSOURCE_DIR=${CMAKE_SOURCE_DIR}
-        -DBIN_DIR=${CMAKE_BINARY_DIR}
-        -P ${CMAKE_SOURCE_DIR}/cmake/GenerateVersionHeader.cmake
-    COMMENT "Generating version header (version.h)"
-)
-add_dependencies(${CMAKE_PROJECT_NAME} version_info)
 
 # Add project symbols (macros)
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE
