@@ -18,6 +18,9 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history so git-describe works
+          fetch-tags: true       # ensure all tags are present
 
       # ---------------------------
       # Build Firmware
