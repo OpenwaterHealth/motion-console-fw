@@ -35,7 +35,7 @@ jobs:
             -w /workspace \
             --workdir /workspace \
             ghcr.io/openwaterhealth/stm32-build-env:latest \
-            bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
+            bash -lc "git config --global --add safe.directory /workspace && cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
 
       # ---------------------------
       # Upload Firmware
