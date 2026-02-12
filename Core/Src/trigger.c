@@ -17,6 +17,8 @@
 // setup default
 Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
 
+volatile uint8_t _usb_trigger_interlock = 0;
+
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
 
