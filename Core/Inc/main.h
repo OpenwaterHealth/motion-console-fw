@@ -47,6 +47,20 @@ extern "C" {
 /* Exported macro ------------------------------------------------------------*/
 /* USER CODE BEGIN EM */
 
+#ifndef FW_VERSION
+#define FW_VERSION "unknown"
+#endif
+#ifndef FW_SHA
+#define FW_SHA "unknown"
+#endif
+#ifndef FW_BUILD_TIME
+#define FW_BUILD_TIME "unknown"
+#endif
+
+#define FW_VERSION_STRING FW_VERSION
+#define FW_SHA_STRING FW_SHA
+#define FW_BUILD_TIME_STRING FW_BUILD_TIME
+
 /* USER CODE END EM */
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
@@ -69,8 +83,6 @@ void Error_Handler(void);
 #define EE_CS_GPIO_Port GPIOA
 #define TECDAC_SS_Pin GPIO_PIN_3
 #define TECDAC_SS_GPIO_Port GPIOE
-#define LED_ON_Pin GPIO_PIN_8
-#define LED_ON_GPIO_Port GPIOB
 #define IND3_Pin GPIO_PIN_5
 #define IND3_GPIO_Port GPIOD
 #define SP_GPIO2_Pin GPIO_PIN_2
@@ -105,12 +117,14 @@ void Error_Handler(void);
 #define FSYNC_GPIO_Port GPIOA
 #define TEMPGD_Pin GPIO_PIN_10
 #define TEMPGD_GPIO_Port GPIOE
+#define FAN_TOP_GD3_Pin GPIO_PIN_14
+#define FAN_TOP_GD3_GPIO_Port GPIOE
 #define SYNC_OUT_Pin GPIO_PIN_15
 #define SYNC_OUT_GPIO_Port GPIOD
 #define BRD_V2_Pin GPIO_PIN_7
 #define BRD_V2_GPIO_Port GPIOE
-#define POWER_DETECT_Pin GPIO_PIN_15
-#define POWER_DETECT_GPIO_Port GPIOE
+#define FAN_TOP_GD4_Pin GPIO_PIN_15
+#define FAN_TOP_GD4_GPIO_Port GPIOE
 #define SYNC_IN_Pin GPIO_PIN_14
 #define SYNC_IN_GPIO_Port GPIOD
 #define FULL_ON_n_Pin GPIO_PIN_10

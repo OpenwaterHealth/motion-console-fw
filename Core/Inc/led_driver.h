@@ -16,6 +16,13 @@ typedef enum {
     LED_ON = 1
 } LED_State;
 
+typedef enum {
+    LED_NONE = 0,
+    LED_RED = 1,
+    LED_GREEN = 2,
+    LED_BLUE = 3
+} LED_COLORS;
+
 // Function prototypes
 void LED_Init(void);
 void LED_SetState(GPIO_TypeDef *GPIO_Port, uint16_t GPIO_Pin, LED_State state);

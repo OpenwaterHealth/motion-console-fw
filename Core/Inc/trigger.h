@@ -29,6 +29,7 @@ typedef struct {
     uint32_t LaserPulseSkipDelayUsec;
 } Trigger_Config_t;
 
+void trigger_init(void);
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config);
 HAL_StatusTypeDef Trigger_Start() ;
 HAL_StatusTypeDef Trigger_Stop();

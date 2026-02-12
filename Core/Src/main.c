@@ -17,6 +17,7 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include "version.h"
 #include "main.h"
 #include "cmsis_os.h"
 #include "usb_device.h"
@@ -34,6 +35,7 @@
 #include "ads7924.h"
 #include "fan_driver.h"
 #include "ad5761r.h"
+#include "XO2_dev.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -92,7 +94,6 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
-uint8_t FIRMWARE_VERSION_DATA[3] = {1, 4, 7};
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
 uint8_t txBuffer[COMMAND_MAX_SIZE];
@@ -103,6 +104,7 @@ extern ADS7828_HandleTypeDef adc_mon[2];
 ADS7924_HandleTypeDef tec_ads;
 extern bool ad5761r_enabled;
 extern FAN_Driver fan;
+extern MachSTM_Handle_t machSTM_hdl;
 
 ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
@@ -264,8 +266,8 @@ int main(void)
 
   DWT_Init();
 
-  // HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
-  // HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
+  //HAL_GPIO_DeInit(SCL_CFG_GPIO_Port, SCL_CFG_Pin);
+  //HAL_GPIO_DeInit(SDA_REM_GPIO_Port, SDA_REM_Pin);
   HAL_GPIO_WritePin(SCL_CFG_GPIO_Port, SCL_CFG_Pin, GPIO_PIN_RESET);
   HAL_GPIO_WritePin(SDA_REM_GPIO_Port, SDA_REM_Pin, GPIO_PIN_RESET);
 
@@ -273,16 +275,24 @@ int main(void)
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_RESET);
 
 
-  HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_SET);
-
+  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
 
   printf("\033c");
   HAL_Delay(250);
-  printf("Openwater open-MOTION Console FW v%d.%d.%d\r\n\r\n",FIRMWARE_VERSION_DATA[0], FIRMWARE_VERSION_DATA[1], FIRMWARE_VERSION_DATA[2]);
-  printf("Board Version: 0x%02X\r\n", BoardV_Read());
+  printf("Openwater open-MOTION Console\r\n\r\n");
+  printf("FW: %s (%s)\r\nDate: %s\r\n",
+       FW_VERSION_STRING,
+       FW_SHA_STRING,
+       FW_BUILD_TIME_STRING);
+  printf("Board Version: 0x%02X\r\n\r\n", BoardV_Read());
   printf("CPU Clock Frequency: %lu MHz\r\n", HAL_RCC_GetSysClockFreq() / 1000000);
   printf("Initializing, please wait ...\r\n");
+
+  // setup fpga programming
+  machSTM_hdl.addr7 = MACHXO_I2C_ADDR_7BIT;
+  machSTM_hdl.hi2c = &hi2c1;
+  machSTM_hdl.fpga_idx = 0;
+  machSTM_hdl.verbose = 0u;
 
   // configure TEC DAC
   printf("Initialize TEC DAC\r\n");
@@ -296,7 +306,7 @@ int main(void)
   tec_dac.rst_port=NULL;
   tec_dac.rst_pin=0;
   tec_dac.type=AD5761R,
-  tec_dac.ra=AD5761R_RANGE_0V_TO_P_5V;
+  tec_dac.ra=AD5761R_RANGE_M_5V_TO_P_5V;
   tec_dac.pv=AD5761R_SCALE_FULL;
   tec_dac.cv=AD5761R_SCALE_FULL;
   tec_dac.int_ref_en=true;
@@ -318,13 +328,15 @@ int main(void)
   }
 
   HAL_GPIO_WritePin(IO_EXP_RSTN_GPIO_Port, IO_EXP_RSTN_Pin, GPIO_PIN_SET);
-  HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
+  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_SET);
 
 
   HAL_GPIO_WritePin(enSyncIN_GPIO_Port, enSyncIN_Pin, GPIO_PIN_RESET); // set for internal sync
   HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
   HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
 
+  trigger_init();
+  
   // config trigger timers
   Trigger_Config_t triggerSetup;
   triggerSetup.frequencyHz = 40;
@@ -338,7 +350,7 @@ int main(void)
 
   // HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1); // TA Trigger
 
-  LED_RGB_SET(1); // RED - starting up
+  LED_RGB_SET(LED_RED); // RED - starting up
 
   // Initialize first multiplexer on I2C1 with default address
   for(int i = 0; i < 2; i++)
@@ -363,9 +375,10 @@ int main(void)
   //printf("I2C2\r\n");
   //I2C_scan(&hi2c2, NULL, 0, true);
 
-  printf("I2C4\r\n");
-  I2C_scan(&hi2c4, NULL, 0, true);
-
+  //printf("I2C4\r\n");
+  //I2C_scan(&hi2c4, NULL, 0, true);
+  TCA9548A_SelectChannel(0, 3);
+  I2C_scan(&hi2c1, NULL, 0, true);
 #endif
 
   // setup PDU monitor
@@ -385,7 +398,7 @@ int main(void)
 	  ADS7828_ReadChannel(&adc_mon[1], 0, &raw);
   }
 
-  ADS7924_Init(&tec_ads, &hi2c2, 1, 2, ADS7924_ADDR_A0_DVDD, 3.300f, true);
+  ADS7924_Init(&tec_ads, &hi2c2, 1, 3, ADS7924_ADDR_A0_DVDD, 3.300f, true);
   
   FAN_Init(&fan, &hi2c4, 0x2C);
 
@@ -408,7 +421,7 @@ int main(void)
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
-  HAL_GPIO_WritePin(LED_ON_GPIO_Port, LED_ON_Pin, GPIO_PIN_RESET);
+  // Enable USB HUB
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
   HAL_Delay(250);
 
@@ -441,7 +454,7 @@ int main(void)
   comms_init();
 
 
-  LED_RGB_SET(3); // Green - happy
+  LED_RGB_SET(LED_GREEN); // Green - happy
 
   /* USER CODE END RTOS_THREADS */
 
@@ -1322,7 +1335,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|TECDAC_SS_Pin|TA_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, SYS_EN_Pin|LED_ON_Pin, GPIO_PIN_RESET);
+  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, EE_CS_Pin|IO_EXP_RSTN_Pin|IND1_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
@@ -1353,8 +1366,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SYS_EN_Pin LED_ON_Pin SEED_CS_Pin OPT_CS_Pin */
-  GPIO_InitStruct.Pin = SYS_EN_Pin|LED_ON_Pin|SEED_CS_Pin|OPT_CS_Pin;
+  /*Configure GPIO pins : SYS_EN_Pin SEED_CS_Pin OPT_CS_Pin */
+  GPIO_InitStruct.Pin = SEED_CS_Pin|OPT_CS_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -1384,10 +1397,10 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : FAN_TOP_GD2_Pin MCU_GPIO1_Pin TEMPGD_Pin BRD_V2_Pin
-                           POWER_DETECT_Pin BRD_V0_Pin */
-  GPIO_InitStruct.Pin = FAN_TOP_GD2_Pin|MCU_GPIO1_Pin|TEMPGD_Pin|BRD_V2_Pin
-                          |POWER_DETECT_Pin|BRD_V0_Pin;
+  /*Configure GPIO pins : FAN_TOP_GD2_Pin MCU_GPIO1_Pin TEMPGD_Pin FAN_TOP_GD3_Pin
+                           BRD_V2_Pin FAN_TOP_GD4_Pin BRD_V0_Pin */
+  GPIO_InitStruct.Pin = FAN_TOP_GD2_Pin|MCU_GPIO1_Pin|TEMPGD_Pin|FAN_TOP_GD3_Pin
+                          |BRD_V2_Pin|FAN_TOP_GD4_Pin|BRD_V0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
@@ -1435,6 +1448,14 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
 	{
 		logging_UART_TxCpltCallback(huart);
 	}
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+
+    if (huart->Instance == USART1) {
+        // Handle errors here. Maybe reset DMA reception, etc.
+        comms_handle_ErrorCallback(huart);
+    }
 }
 
 void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
@@ -1530,15 +1551,40 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   /* USER CODE BEGIN Callback 1 */
   if (htim->Instance == TIM15) {
-	HAL_TIM_Base_Stop_IT(htim);
-	if(_enter_dfu) {
+    HAL_TIM_Base_Stop_IT(htim);
+    if(_enter_dfu) {
+      *((uint32_t *)0x38000000) = 0xDEADBEEF; 
+    }
 
-	}
+    // Stop and De-initialize Timers
+    HAL_TIM_Base_DeInit(&htim1);
+    HAL_TIM_Base_DeInit(&htim3);
+    HAL_TIM_Base_DeInit(&htim12);
+    HAL_TIM_Base_DeInit(&htim15);
+    HAL_TIM_Base_DeInit(&htim2);
 
-	MX_USB_DEVICE_DeInit();
-	delay_ms(300);
-	// Reset the board
-	NVIC_SystemReset();
+    // De-initialize I2C interfaces
+    HAL_I2C_DeInit(&hi2c1);
+    HAL_I2C_DeInit(&hi2c2);
+    HAL_I2C_DeInit(&hi2c4);
+
+    // De-initialize SPI interfaces
+    HAL_SPI_DeInit(&hspi1);
+    HAL_SPI_DeInit(&hspi2);
+    HAL_SPI_DeInit(&hspi3);
+    HAL_SPI_DeInit(&hspi4);
+
+    // De-initialize UART
+    HAL_UART_DeInit(&huart4);
+
+    // De-initialize other specific modules
+    HAL_RNG_DeInit(&hrng);
+    HAL_CRC_DeInit(&hcrc);
+    
+    MX_USB_DEVICE_DeInit();
+    delay_ms(300);
+    // Reset the board
+    NVIC_SystemReset();
 
   }
 
@@ -1555,7 +1601,7 @@ void Error_Handler(void)
   /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
 
-  LED_RGB_SET(1); // Red - error
+  LED_RGB_SET(LED_RED); // Red - error
 
   __disable_irq();
   while (1)

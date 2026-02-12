@@ -73,7 +73,8 @@ EMBED_TEMPLATES = {
 
             "runToEntryPoint": "main",
             "svdFile": "${SVD_FILE}",
-            "preLaunchTask": "CMake: Build (Debug)"
+            "preLaunchTask": "CMake: Build (Debug)",
+            "postDebugTask": "Kill OpenOCD"
         },
         {
             "name": "Attach (OpenOCD)",
@@ -90,7 +91,8 @@ EMBED_TEMPLATES = {
             ],
 
             "svdFile": "${SVD_FILE}",
-            "preLaunchTask": "CMake: Build (Debug)"
+            "preLaunchTask": "CMake: Build (Debug)",
+            "postDebugTask": "Kill OpenOCD"
         }
     ]
 }
@@ -249,6 +251,14 @@ EMBED_TEMPLATES = {
                 "cwd": "${workspaceFolder}"
             }
         }
+        ,
+        {
+            "label": "Kill OpenOCD",
+            "type": "shell",
+            "command": "${KILL_OPENOCD_CMD}",
+            "args": [${KILL_OPENOCD_ARGS}],
+            "problemMatcher": []
+        }
     ]
 }
 ''',
@@ -349,6 +359,15 @@ def main():
         else:
             toolchain_bin_path = ''
     
+    # OS-aware kill command for OpenOCD (used by the Kill OpenOCD task)
+    sysname = platform.system().lower()
+    if 'windows' in sysname:
+        kill_cmd = 'taskkill'
+        kill_args = '"/IM","openocd.exe","/F"'
+    else:
+        kill_cmd = 'pkill'
+        kill_args = '"-f","openocd"'
+
     mapping = {
         'TOOLCHAIN_GCC': cfg.get('toolchain_gcc', ''),
         'TOOLCHAIN_BIN_PATH': toolchain_bin_path,
@@ -361,6 +380,8 @@ def main():
         'ELF_NAME': elf_name,
         'SVD_FILE': cfg.get('svd_file', '')
     }
+    mapping['KILL_OPENOCD_CMD'] = kill_cmd
+    mapping['KILL_OPENOCD_ARGS'] = kill_args
 
     for name in TEMPLATES:
         template = EMBED_TEMPLATES.get(name)

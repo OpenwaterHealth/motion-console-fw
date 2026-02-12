@@ -21,6 +21,7 @@
 #include "ads7924.h"
 #include "max31875.h"
 #include "led_driver.h"
+#include "if_commands.h"
 
 #include <string.h>
 
@@ -36,46 +37,17 @@ volatile uint32_t ptrReceive;
 volatile uint8_t rx_flag = 0;
 volatile uint8_t tx_flag = 0;
 
-
-static ConsoleTemperatures consoleTemps;
-static uint8_t board_id;
-
-typedef struct {
-    uint16_t raws[PDU_N];  // 32B, naturally aligned
-    float    vals[PDU_N];  // 64B, naturally aligned
-} PDUFields_t;
-
-typedef union {
-    PDUFields_t f;
-    uint8_t     bytes[sizeof(PDUFields_t)];
-} PDUFrame_t;
-
-static PDUFrame_t pdu_frame;
-
 SemaphoreHandle_t uartTxSemaphore;
 SemaphoreHandle_t xRxSemaphore;
 TaskHandle_t commsTaskHandle;
 
+/* consoleTemps is owned by the command-processing module */
+extern ConsoleTemperatures consoleTemps;
+
 extern FAN_Driver fan;
-extern uint8_t FIRMWARE_VERSION_DATA[3];
 extern bool _enter_dfu;
 
 extern ad5761r_dev tec_dac;
-
-static uint8_t last_fan_speed = 0;
-static uint32_t id_words[3] = {0};
-static uint8_t i2c_list[10] = {0};
-static uint8_t i2c_data[0xff] = {0};
-static uint32_t last_fsync_count = 0;
-static uint32_t last_lsync_count = 0;
-
-static float tecadc_last_volts[4];
-static uint16_t tecadc_last_raw[4];
-static uint8_t tec_temp_good;
-static char retTriggerJson[0xFF];
-static float tec_setpoint = 0.0;
-
-static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd);
 
 const osThreadAttr_t comm_rec_task_attribs = {
   .name = "comRecTask",
@@ -83,39 +55,38 @@ const osThreadAttr_t comm_rec_task_attribs = {
   .priority = (osPriority_t) osPriorityHigh,
 };
 
+// Local helper used for sending
 void printUartPacket(const UartPacket* packet) {
-    if (!packet) {
-        printf("Invalid packet (NULL pointer).\n");
-        return;
-    }
+	if (!packet) {
+		printf("Invalid packet (NULL pointer).\n");
+		return;
+	}
 
-    printf("UartPacket:\r\n");
-    printf("  ID: %u\r\n", packet->id);
-    printf("  Packet Type: 0x%02X\r\n", packet->packet_type);
-    printf("  Command: 0x%02X\r\n", packet->command);
-    printf("  Address: 0x%02X\r\n", packet->addr);
-    printf("  Reserved: 0x%02X\r\n", packet->reserved);
-    printf("  Data Length: %u\r\n", packet->data_len);
+	printf("UartPacket:\r\n");
+	printf("  ID: %u\r\n", packet->id);
+	printf("  Packet Type: 0x%02X\r\n", packet->packet_type);
+	printf("  Command: 0x%02X\r\n", packet->command);
+	printf("  Address: 0x%02X\r\n", packet->addr);
+	printf("  Reserved: 0x%02X\r\n", packet->reserved);
+	printf("  Data Length: %u\r\n", packet->data_len);
 
-    printf("  Data: ");
-    if (packet->data && packet->data_len > 0) {
-        for (uint16_t i = 0; i < packet->data_len; ++i) {
-            printf("0x%02X ", packet->data[i]);
-        }
-        printf("\r\n");
-    } else {
-        printf("No data\r\n");
-    }
+	printf("  Data: ");
+	if (packet->data && packet->data_len > 0) {
+		for (uint16_t i = 0; i < packet->data_len; ++i) {
+			printf("0x%02X ", packet->data[i]);
+		}
+		printf("\r\n");
+	} else {
+		printf("No data\r\n");
+	}
 
-    printf("  CRC: 0x%04X\r\n\r\n", packet->crc);
+	printf("  CRC: 0x%04X\r\n\r\n", packet->crc);
 }
 
 static void UART_INTERFACE_SendDMA(UartPacket* pResp)
 {
-    // Wait for semaphore availability before proceeding
+	// Wait for semaphore availability before proceeding
 	if (xSemaphoreTake(uartTxSemaphore, portMAX_DELAY) == pdTRUE) {
-		// printf("Sending Response\r\n");
-		// printf("send data\r\n");
 		memset(txBuffer, 0, sizeof(txBuffer));
 		int bufferIndex = 0;
 
@@ -140,10 +111,9 @@ static void UART_INTERFACE_SendDMA(UartPacket* pResp)
 		txBuffer[bufferIndex++] = OW_END_BYTE;
 
 		CDC_Transmit_FS(txBuffer, bufferIndex);
-		// HAL_UART_Transmit_DMA(&huart1, txBuffer, bufferIndex);
 		while(!tx_flag);
-        xSemaphoreGive(uartTxSemaphore);
-    }
+		xSemaphoreGive(uartTxSemaphore);
+	}
 }
 
 void comms_receive_task(void *argument) {
@@ -155,19 +125,17 @@ void comms_receive_task(void *argument) {
 
 	UartPacket cmd;
 	UartPacket resp;
-    uint16_t calculated_crc;
-    rx_flag = 0;
-    tx_flag = 0;
-    while(1) {
-    	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
+	uint16_t calculated_crc;
+	rx_flag = 0;
+	tx_flag = 0;
+	while(1) {
+		CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
 
-    	ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+		ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-		// printf("data received\r\n");
 		int bufferIndex = 0;
 
 		if(rxBuffer[bufferIndex++] != OW_START_BYTE) {
-			// Send NACK doesn't have the correct start byte
 			resp.id = cmd.id;
 			resp.data_len = 0;
 			resp.packet_type = OW_NAK;
@@ -187,9 +155,6 @@ void comms_receive_task(void *argument) {
 
 		// Check if data length is valid
 		if (cmd.data_len > COMMAND_MAX_SIZE - bufferIndex && rxBuffer[COMMAND_MAX_SIZE-1] != OW_END_BYTE) {
-			// Send NACK response due to no end byte
-			// data can exceed buffersize but every buffer must have a start and end packet
-			// command that will send more data than one buffer will follow with data packets to complete the request
 			resp.id = cmd.id;
 			resp.addr = 0;
 			resp.reserved = 0;
@@ -224,7 +189,6 @@ void comms_receive_task(void *argument) {
 
 		// Check CRC
 		if (cmd.crc != calculated_crc) {
-			// Send NACK response due to bad CRC
 			resp.id = cmd.id;
 			resp.addr = 0;
 			resp.reserved = 0;
@@ -242,15 +206,15 @@ void comms_receive_task(void *argument) {
 			resp.packet_type = OW_NAK;
 			goto NextDataPacket;
 		}
-		// printUartPacket(&cmd);
+
 		process_if_command(&resp, &cmd);
 
-NextDataPacket:
+	NextDataPacket:
 		UART_INTERFACE_SendDMA(&resp);
 		memset(rxBuffer, 0, sizeof(rxBuffer));
 		ptrReceive=0;
 		rx_flag = 0;
-    }
+	}
 
 }
 
@@ -258,456 +222,24 @@ NextDataPacket:
 void comms_init() {
 	printf("Initilize comms task\r\n");
 
+	/* initialize console temps via the command module ownership */
 	consoleTemps.f.t1 = 0;
 	consoleTemps.f.t2 = 0;
 	consoleTemps.f.t3 = 0;
 
-    uartTxSemaphore = xSemaphoreCreateBinary();
-    xSemaphoreGive(uartTxSemaphore); // Initially available for transmission
-    xRxSemaphore = xSemaphoreCreateBinary();
-    if (xRxSemaphore == NULL) {
-        // Handle semaphore creation failure
-    	printf("failed to create xRxSemaphore\r\n");
-    }
+	uartTxSemaphore = xSemaphoreCreateBinary();
+	xSemaphoreGive(uartTxSemaphore); // Initially available for transmission
+	xRxSemaphore = xSemaphoreCreateBinary();
+	if (xRxSemaphore == NULL) {
+		// Handle semaphore creation failure
+		printf("failed to create xRxSemaphore\r\n");
+	}
 
 	commsTaskHandle = osThreadNew(comms_receive_task, NULL, &comm_rec_task_attribs);
 	if (commsTaskHandle == NULL) {
 		printf("Failed to create comms Task\r\n");
 	}
 }
-
-
-static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
-{
-	_Bool ret = true;
-	int iRet = 0;
-	uartResp->command = cmd->command;
-	switch (cmd->command)
-	{
-		case OW_CTRL_I2C_SCAN:
-			//printf("I2C Scan\r\n");
-			uartResp->command = OW_CTRL_I2C_SCAN;
-			if(cmd->data_len != 2){
-				uartResp->packet_type = OW_ERROR;
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-			}else{
-				//printf("I2C Scan MUX: 0x%02X CH: 0x%02X \r\n", cmd->data[0], cmd->data[1]);
-				memset(i2c_list, 0, 10);
-				iRet = TCA9548A_scan_channel(cmd->data[0], cmd->data[1], i2c_list, 10, false);
-				if(iRet < 0){
-					// error
-					uartResp->packet_type = OW_ERROR;
-					uartResp->data_len = 0;
-					uartResp->data = NULL;
-				} else {
-					uartResp->data_len = (uint16_t)iRet;
-					uartResp->data = i2c_list;
-				}
-			}
-			break;
-		case OW_CTRL_SET_IND:
-			//printf("Console SET Indicator\r\n");
-			uartResp->command = OW_CTRL_SET_IND;
-			if(uartResp->reserved > 3){
-				uartResp->packet_type = OW_ERROR;
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-			}
-			else
-			{
-				LED_RGB_SET(cmd->reserved);
-			}
-			break;
-		case OW_CTRL_GET_IND:
-			//printf("Console GET Indicator\r\n");
-			uartResp->command = OW_CTRL_GET_IND;
-			uartResp->reserved = LED_RGB_GET();
-			break;
-		case OW_CTRL_SET_FAN:
-			//printf("Console Set Fan ADDR: 0x%02X SPEED: 0x%02X\r\n", cmd->addr, cmd->data[0]);
-			uartResp->command = OW_CTRL_SET_FAN;
-			if(cmd->addr > 1 || cmd->data_len != 1){
-				uartResp->packet_type = OW_ERROR;
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-			}else{
-				printf("Set fan to: %d\r\n", cmd->data[0]);
-				FAN_SetManualPWM(&fan, cmd->data[0]);
-			}
-			break;
-		case OW_CTRL_GET_FAN:
-			//printf("Console Get Fan ADDR: 0x%02X\r\n", cmd->addr);
-			uartResp->command = OW_CTRL_GET_FAN;
-			if(cmd->addr > 1){
-				uartResp->packet_type = OW_ERROR;
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-			}else{
-				last_fan_speed = FAN_GetPWMDuty(&fan);
-				uartResp->data_len = 1;
-				uartResp->data = &last_fan_speed;
-			}
-			break;
-		case OW_CTRL_I2C_RD:
-			uartResp->command = OW_CTRL_I2C_RD;
-			if(cmd->data_len != 5) {
-				uartResp->packet_type = OW_ERROR;
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-			} else {
-				uint8_t mux_index = cmd->data[0];
-				uint8_t channel = cmd->data[1];
-				uint8_t i2c_addr = cmd->data[2];
-				uint8_t reg_addr = cmd->data[3];
-				uint8_t data_len = cmd->data[4];
-				memset(i2c_data, 0, 0xff); // clear buffer
-				// printf("I2C Read MUX: 0x%02X CHANNEL: 0x%02X I2C ADDR: 0x%02X REGISTER: 0x%02X DATA_LEN: 0x%02X\r\n", mux_index, channel, i2c_addr, reg_addr, data_len);
-				int8_t ret = TCA9548A_Read_Data(mux_index, channel, i2c_addr, reg_addr, data_len, i2c_data);
-				if (ret!= TCA9548A_OK) {
-					printf("error selecting channel\r\n");
-					uartResp->packet_type = OW_ERROR;
-					uartResp->data_len = 0;
-					uartResp->data = NULL;
-				} else {
-					uartResp->data_len = data_len;
-					uartResp->data = i2c_data;
-				}
-			}
-			break;
-		case OW_CTRL_I2C_WR:
-			uartResp->command = OW_CTRL_I2C_WR;
-			if(cmd->data_len < 5) {
-				uartResp->packet_type = OW_ERROR;
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-			} else {
-				uint8_t mux_index = cmd->data[0];
-				uint8_t channel = cmd->data[1];
-				uint8_t i2c_addr = cmd->data[2];
-				uint8_t reg_addr = cmd->data[3];
-				uint8_t data_len = cmd->data[4];
-				uint8_t *pData = &cmd->data[5];
-				// printf("I2C Write MUX: 0x%02X CHANNEL: 0x%02X I2C ADDR: 0x%02X REGISTER: 0x%02X DATA_LEN: 0x%02X\r\n",mux_index, channel, i2c_addr, reg_addr, data_len);
-				// printf("Data to Write\r\n");
-				// printBuffer(pData, data_len);
-				int8_t ret = TCA9548A_Write_Data(mux_index, channel, i2c_addr, reg_addr, data_len, pData);
-				if (ret!= TCA9548A_OK) {
-					printf("error selecting channel\r\n");
-					uartResp->packet_type = OW_ERROR;
-					uartResp->data_len = 0;
-					uartResp->data = NULL;
-				}
-			}
-			break;
-		case OW_CTRL_SET_TRIG:
-			uartResp->command = OW_CTRL_SET_TRIG;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-
-			if(Trigger_SetConfigFromJSON((char *)cmd->data, cmd->data_len) != HAL_OK)
-			{
-				uartResp->packet_type = OW_ERROR;
-			}else{
-				// refresh state
-				memset(retTriggerJson, 0, sizeof(retTriggerJson));
-				if(Trigger_GetConfigToJSON(retTriggerJson, 0xFF) != HAL_OK)
-				{
-					uartResp->packet_type = OW_ERROR;
-				}else{
-					uartResp->data_len = strlen(retTriggerJson);
-					uartResp->data = (uint8_t *)retTriggerJson;
-				}
-			}
-
-			break;
-
-		case OW_CTRL_GET_TRIG:
-			uartResp->command = OW_CTRL_GET_TRIG;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-			memset(retTriggerJson, 0, sizeof(retTriggerJson));
-			if(Trigger_GetConfigToJSON(retTriggerJson, 0xFF) != HAL_OK)
-			{
-				uartResp->packet_type = OW_ERROR;
-			}else{
-				uartResp->data_len = strlen(retTriggerJson);
-				uartResp->data = (uint8_t *)retTriggerJson;
-			}
-			break;
-		case OW_CTRL_START_TRIG:
-			uartResp->command = OW_CTRL_START_TRIG;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-
-			LED_RGB_SET(2); // Blue
-			Trigger_Start();
-			break;
-		case OW_CTRL_STOP_TRIG:
-			uartResp->command = OW_CTRL_STOP_TRIG;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-
-			LED_RGB_SET(3); // Green
-			Trigger_Stop();
-			break;
-		case OW_CTRL_GET_FSYNC:
-			uartResp->command = OW_CTRL_GET_FSYNC;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 4;
-			last_fsync_count = get_fsync_pulse_count();
-			uartResp->data = (uint8_t *)&last_fsync_count;
-			break;
-		case OW_CTRL_GET_LSYNC:
-			uartResp->command = OW_CTRL_GET_LSYNC;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 4;
-			last_lsync_count = get_lsync_pulse_count();
-			uartResp->data = (uint8_t *)&last_lsync_count;
-			break;
-		case OW_CTRL_TEC_DAC:
-			uartResp->command = OW_CTRL_TEC_DAC;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			if(cmd->reserved == 0){
-				// get voltage setpoint
-				uint16_t reg_data = 0;
-				if(ad5761r_register_readback(&tec_dac, CMD_RD_DAC_REG, &reg_data) == HAL_OK)
-				{
-					float temp_val = 0;
-					temp_val = code_to_volts(&tec_dac, reg_data);
-					uartResp->data = (uint8_t *)&temp_val;
-			        uartResp->data_len   = sizeof(float);   // 4
-
-				}else{
-				  uartResp->data_len = 0;
-				  uartResp->data = NULL;
-				  uartResp->packet_type = OW_ERROR;
-				}
-			}
-			else if(cmd->reserved == 1 && cmd->data_len == 4){
-				// set voltage setpoint
-		        float set_voltage;
-		        memcpy(&set_voltage, cmd->data, sizeof(float));
-				uint16_t reg_data = 0;
-			    reg_data = volts_to_code(&tec_dac, set_voltage);
-	            uartResp->data_len    = 4;  // ACK with empty payload
-				uartResp->data = (uint8_t *)&tec_setpoint;
-			    if(ad5761r_write_update_dac_register(&tec_dac, reg_data)!=0){
-				  printf("TEC DAC Failed to set DAC Voltage\r\n");
-				  uartResp->data_len = 0;
-				  uartResp->data = NULL;
-				  uartResp->packet_type = OW_ERROR;
-				}else{
-		            tec_setpoint       = set_voltage;  // remember last setpoint
-		            uartResp->data_len    = 4;  // ACK with empty payload
-					uartResp->data = (uint8_t *)&tec_setpoint;
-				}
-			}else{
-				uartResp->data_len = 0;
-				uartResp->data = NULL;
-				uartResp->packet_type = OW_UNKNOWN;
-			}
-
-			break;
-		case OW_CTRL_GET_TEMPS:
-			uartResp->command = OW_CTRL_GET_TEMPS;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-
-			TCA9548A_SelectChannel(1, 1); // temp sensors
-
-			// last_temperature1 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
-			consoleTemps.f.t1 = MAX31875_ReadTemperature(MAX31875_TEMP1_DEV_ADDR);
-
-			// last_temperature2 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
-			consoleTemps.f.t2 = MAX31875_ReadTemperature(MAX31875_TEMP2_DEV_ADDR);
-
-			// last_temperature3 = 30.0f + (rand() % 41);  // Random float between 30.0 and 70.0
-			consoleTemps.f.t3 = MAX31875_ReadTemperature(MAX31875_TEMP3_DEV_ADDR);
-
-            uartResp->data_len    = sizeof(consoleTemps.bytes);;  // ACK with empty payload
-			uartResp->data = consoleTemps.bytes;
-
-			break;
-		case OW_CTRL_TEC_STATUS:
-			uartResp->command = OW_CTRL_TECADC;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-
-			tec_temp_good = HAL_GPIO_ReadPin(TEMPGD_GPIO_Port, TEMPGD_Pin)?0:1;   // active low
-			uartResp->data_len = 1;
-			uartResp->data = &tec_temp_good;
-			break;
-		case OW_CTRL_TECADC:
-			uartResp->command = OW_CTRL_TECADC;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			if(uartResp->reserved>4){
-				uartResp->data_len = 0;
-				uartResp->packet_type = OW_UNKNOWN;
-			}else{
-				memset(tecadc_last_volts, 0, 16);
-				if(cmd->reserved == 4)
-				{
-					if(ADS7924_ReadAllRaw(&tec_ads, tecadc_last_raw, 100) != ADS7924_OK)
-					{
-					  printf("Failed to read ADC channels\r\n");
-					  uartResp->data_len = 0;
-					  uartResp->packet_type = OW_UNKNOWN;
-					}else{
-					  for(int i=0; i < 4; i++){
-						  tecadc_last_volts[i] = ADS7924_CodeToVolts(&tec_ads, tecadc_last_raw[i]);
-					  }
-			          uartResp->data_len = 16;
-			          uartResp->data = (uint8_t *)tecadc_last_volts;
-					}
-					break;
-				}
-
-				if(ADS7924_ReadVoltage(&tec_ads, uartResp->reserved, &tecadc_last_volts[uartResp->reserved], 100) != ADS7924_OK)
-				{
-				  printf("Failed to read ADC channel %d\r\n", uartResp->reserved);
-				  uartResp->data_len = 0;
-				  uartResp->packet_type = OW_UNKNOWN;
-				}else{
-		          uartResp->data_len = 4;
-		          uartResp->data = (uint8_t *)&tecadc_last_volts[uartResp->reserved];
-				}
-			}
-			break;
-		case OW_CTRL_BOARDID:
-			uartResp->command = OW_CTRL_BOARDID;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 1;
-			board_id = BoardV_Read();
-			uartResp->data = (uint8_t *)(&board_id);
-			break;
-		case OW_CTRL_PDUMON:
-			uartResp->command = OW_CTRL_PDUMON;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			if (ADS7828_ReadAllChannels2(&adc_mon[0], &pdu_frame.f.raws[0], &pdu_frame.f.vals[0]) != HAL_OK) {
-				  printf("Failed to read ADC MON 0\r\n");
-				  uartResp->data_len = 0;
-				  uartResp->data = NULL;
-				  uartResp->packet_type = OW_ERROR;
-				  break;
-			}
-			if (ADS7828_ReadAllChannels2(&adc_mon[1], &pdu_frame.f.raws[8], &pdu_frame.f.vals[8]) != HAL_OK) {
-				  printf("Failed to read ADC MON 1\r\n");
-				  uartResp->data_len = 0;
-				  uartResp->data = NULL;
-				  uartResp->packet_type = OW_ERROR;
-				  break;
-			}
-			uartResp->data_len = (uint16_t)sizeof(pdu_frame);
-			uartResp->data = pdu_frame.bytes;
-			break;
-		default:
-			uartResp->data_len = 0;
-			uartResp->packet_type = OW_UNKNOWN;
-			break;
-	}
-
-	return ret;
-}
-
-_Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
-{
-	uartResp->id = cmd->id;
-	uartResp->packet_type = OW_RESP;
-	uartResp->addr = 0;
-	uartResp->reserved = 0;
-	uartResp->data_len = 0;
-	uartResp->data = 0;
-	switch (cmd->packet_type)
-	{
-	case OW_CMD:
-		uartResp->command = cmd->command;
-		switch(cmd->command)
-		{
-		case OW_CMD_PING:
-			//printf("ping response\r\n");
-			break;
-		case OW_CMD_NOP:
-			//printf("NOP response\r\n");
-			break;
-		case OW_CMD_VERSION:
-			//printf("Version response\r\n");
-			uartResp->data_len = sizeof(FIRMWARE_VERSION_DATA);
-			uartResp->data = FIRMWARE_VERSION_DATA;
-			break;
-		case OW_CMD_ECHO:
-			// exact copy
-			//printf("Echo response\r\n");
-			uartResp->data_len = cmd->data_len;
-			uartResp->data = cmd->data;
-			break;
-		case OW_CMD_HWID:
-			//printf("HWID response\r\n");
-			id_words[0] = HAL_GetUIDw0();
-			id_words[1] = HAL_GetUIDw1();
-			id_words[2] = HAL_GetUIDw2();
-			uartResp->data_len = 16;
-			uartResp->data = (uint8_t *)&id_words;
-			break;
-		case OW_CMD_TOGGLE_LED:
-			//printf("Toggle LED\r\n");
-			HAL_GPIO_TogglePin(LED_ON_GPIO_Port, LED_ON_Pin);
-			break;
-		case OW_CMD_RESET:
-			//printf("Soft Reset\r\n");
-			uartResp->command = cmd->command;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-
-			__HAL_TIM_CLEAR_FLAG(&htim15, TIM_FLAG_UPDATE);
-			__HAL_TIM_SET_COUNTER(&htim15, 0);
-			if(HAL_TIM_Base_Start_IT(&htim15) != HAL_OK){
-				uartResp->packet_type = OW_ERROR;
-			}
-			break;
-
-		case OW_CMD_DFU:
-			printf("Enter DFU\r\n");
-			uartResp->command = cmd->command;
-			uartResp->addr = cmd->addr;
-			uartResp->reserved = cmd->reserved;
-			uartResp->data_len = 0;
-
-			_enter_dfu = true;
-
-			__HAL_TIM_CLEAR_FLAG(&htim15, TIM_FLAG_UPDATE);
-			__HAL_TIM_SET_COUNTER(&htim15, 0);
-			if(HAL_TIM_Base_Start_IT(&htim15) != HAL_OK){
-				uartResp->packet_type = OW_ERROR;
-			}
-			break;
-		default:
-			break;
-		}
-		break;
-	case OW_CONTROLLER:
-		return process_controller_command(uartResp, cmd);
-	default:
-		uartResp->data_len = 0;
-		uartResp->packet_type = OW_UNKNOWN;
-		// uartResp.data = (uint8_t*)&cmd->tag;
-		break;
-	}
-
-	return true;
-}
-
 
 // Callback functions
 void comms_handle_RxCpltCallback(UART_HandleTypeDef *huart, uint16_t pos) {
@@ -738,7 +270,7 @@ void comms_handle_TxCallback(UART_HandleTypeDef *huart) {
 	}
 }
 
-void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+void comms_handle_ErrorCallback(UART_HandleTypeDef *huart) {
 
     if (huart->Instance == USART1) {
         // Handle errors here. Maybe reset DMA reception, etc.

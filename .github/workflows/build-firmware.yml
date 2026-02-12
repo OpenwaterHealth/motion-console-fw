@@ -3,7 +3,13 @@ name: Build firmware using published build image
 on:
   workflow_dispatch: {}
   push:
-    branches: [ "main" ]
+    branches: [ "main", "next" ]
+    tags:
+      - "*.*.*"
+      - "pre-*"
+
+permissions:
+  contents: write 
 
 jobs:
   build:
@@ -12,10 +18,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # full history so git-describe works
+          fetch-tags: true       # ensure all tags are present
 
+      # ---------------------------
+      # Build Firmware
+      # ---------------------------
       - name: Pull build image
-        run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest
-
+        run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest 
       - name: Build inside container
         run: |
           docker run --rm \
@@ -23,10 +34,71 @@ jobs:
             -w /workspace \
             --workdir /workspace \
             ghcr.io/openwaterhealth/stm32-build-env:latest \
-            bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
+            bash -lc "git config --global --add safe.directory /workspace && cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
 
+      # ---------------------------
+      # Upload Firmware
+      # ---------------------------
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: motion-console-fw
-          path: build/Debug/*.hex
+          path: |
+            build/Debug/*.hex
+            build/Debug/*.bin
+
+      # ---------------------------
+      # Create GitHub Release (tags only)
+      # ---------------------------
+      - name: Detect release type
+        id: reltype
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+
+          if [[ "$TAG_NAME" == pre-* ]] || [[ "$TAG_NAME" == *"-rc"* ]] || [[ "$TAG_NAME" == *"-beta"* ]]; then
+            echo "prerelease=true" >> $GITHUB_OUTPUT
+          else
+            echo "prerelease=false" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Capture build metadata
+        id: buildmeta
+        run: |
+          echo "sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "datetime=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> $GITHUB_OUTPUT
+
+      - name: Generate release notes
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          : > notes.md
+
+          if [[ "${{ steps.reltype.outputs.prerelease }}" == "true" ]]; then
+            echo "⚠️ **PRE-RELEASE – NOT FOR PRODUCTION**" >> notes.md
+            echo "" >> notes.md
+          fi
+
+          PREV_TAG=$(git tag --sort=-creatordate | sed -n '2p')
+
+          if [ -z "$PREV_TAG" ]; then
+            git log --pretty=format:"- %s" >> notes.md
+          else
+            git log ${PREV_TAG}..HEAD --pretty=format:"- %s" >> notes.md
+          fi
+
+          echo "" >> notes.md
+          echo "---" >> notes.md
+          echo "**Build SHA:** \`${{ steps.buildmeta.outputs.sha }}\`" >> notes.md
+          echo "**Build Time:** ${{ steps.buildmeta.outputs.datetime }}" >> notes.md
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ steps.reltype.outputs.prerelease }}
+          allow_updates: ${{ steps.reltype.outputs.prerelease }}
+          replace_existing_artifacts: ${{ steps.reltype.outputs.prerelease }}
+          name: ${{ github.ref_name }}
+          body_path: notes.md
+          files: |
+            build/Debug/*.hex
+            build/Debug/*.bin
