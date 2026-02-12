@@ -26,9 +26,7 @@ jobs:
       # Build Firmware
       # ---------------------------
       - name: Pull build image
-        run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest \
-            bash -lc "git config --global --add safe.directory /workspace && cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
-
+        run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest 
       - name: Build inside container
         run: |
           docker run --rm \
@@ -36,7 +34,7 @@ jobs:
             -w /workspace \
             --workdir /workspace \
             ghcr.io/openwaterhealth/stm32-build-env:latest \
-            bash -lc "cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
+            bash -lc "git config --global --add safe.directory /workspace && cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
 
       # ---------------------------
       # Upload Firmware
