@@ -174,6 +174,7 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     // Reset the counters on SetConfig
 	lsync_counter = 1;
 	fsync_counter = 1;
+    fsync_disable_flag = false;
     
     // Use fixed 1 MHz timer tick (1 µs per tick)
     uint32_t fsync_prescaler = 119; // (e.g., 120MHz / (119+1) = 1 MHz)
@@ -226,6 +227,10 @@ HAL_StatusTypeDef Trigger_Start() {
     if(_usb_trigger_interlock){
         return HAL_ERROR;
     }
+
+    // Clear any pending stop request to avoid a one-pulse stop on restart
+    fsync_disable_flag = false;
+
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, trigger_config.EnableSyncOut? GPIO_PIN_RESET:GPIO_PIN_SET); // fsync out
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, trigger_config.EnableTaTrigger? GPIO_PIN_RESET:GPIO_PIN_SET); // TA Trigger enable
 
@@ -242,7 +247,13 @@ HAL_StatusTypeDef Trigger_Start() {
 
 HAL_StatusTypeDef Trigger_Stop() {
 
-    fsync_disable_flag = true;
+    // If already stopped, clear any pending stop request so next start isn't cut short
+    if (TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_TIM_CHANNEL_STATE_BUSY) {
+        fsync_disable_flag = false;
+        HAL_TIM_OC_Stop_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
+    } else {
+        fsync_disable_flag = true;
+    }
 
     __HAL_TIM_DISABLE(&LASER_TIMER);
 
