@@ -23,13 +23,21 @@
 
 
 
-#define XO2ECA_CMD_LOOP_TIMEOUT    10000 // number of times to poll in a loop before aborting
+#define XO2ECA_CMD_LOOP_TIMEOUT    25000 // number of times to poll in a loop before aborting
 #define XO2ECA_CMD_ERASE_UFM   8
 #define XO2ECA_CMD_ERASE_CFG   4
 #define XO2ECA_CMD_ERASE_FTROW 2
 #define XO2ECA_CMD_ERASE_SRAM  1
 
 
+
+//--------------------------------------------
+//      L o w - l e v e l   T r a n s p o r t
+//--------------------------------------------
+/** Send wbuf[0..wcnt-1] over I2C, optionally read rcnt bytes into rbuf. */
+uint32_t MachXO_CmdXfer(MachXO_Handle_t *h,
+                        const uint8_t *wbuf, int wcnt,
+                        uint8_t *rbuf,       int rcnt);
 
 //--------------------------------------------
 //      G e n e r a l   C o m m a n d s
@@ -66,7 +74,7 @@ int XO2ECAcmd_Refresh(XO2Handle_t *pXO2);
 int XO2ECAcmd_CfgErase(XO2Handle_t *pXO2) ;
 int XO2ECAcmd_CfgResetAddr(XO2Handle_t *pXO2) ;
 int XO2ECAcmd_CfgReadPage(XO2Handle_t *pXO2, unsigned char *pBuf) ;
-int XO2ECAcmd_CfgWritePage(XO2Handle_t *pXO2, unsigned char *pBuf) ;
+int XO2ECAcmd_CfgWritePage(XO2Handle_t *pXO2, const unsigned char *pBuf) ;
 
 
 
@@ -75,7 +83,7 @@ int XO2ECAcmd_CfgWritePage(XO2Handle_t *pXO2, unsigned char *pBuf) ;
 //--------------------------------------------
 int XO2ECAcmd_UFMErase(XO2Handle_t *pXO2) ;
 int XO2ECAcmd_UFMResetAddr(XO2Handle_t *pXO2);
-int XO2ECAcmd_UFMWritePage(XO2Handle_t *pXO2, unsigned char *pBuf) ;
+int XO2ECAcmd_UFMWritePage(XO2Handle_t *pXO2, const unsigned char *pBuf) ;
 int XO2ECAcmd_UFMReadPage(XO2Handle_t *pXO2, unsigned char *pBuf) ;
 
 
@@ -94,4 +102,3 @@ void MXO_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c);
 
 
 #endif
-

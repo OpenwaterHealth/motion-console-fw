@@ -36,6 +36,9 @@
 #include "fan_driver.h"
 #include "ad5761r.h"
 #include "XO2_dev.h"
+#include "XO2_api.h"
+#include "XO2_cmds.h"
+#include "if_fpga_prog.h"
 #include "utils.h"
 
 #include <stdio.h>
@@ -104,7 +107,8 @@ extern ADS7828_HandleTypeDef adc_mon[2];
 ADS7924_HandleTypeDef tec_ads;
 extern bool ad5761r_enabled;
 extern FAN_Driver fan;
-extern MachSTM_Handle_t machSTM_hdl;
+static MachXO_Handle_t s_xo2_i2c_handle;
+static XO2Handle_t     s_xo2_handle;
 
 ad5761r_dev tec_dac;
 volatile bool _enter_dfu = false;
@@ -288,11 +292,21 @@ int main(void)
   printf("CPU Clock Frequency: %lu MHz\r\n", HAL_RCC_GetSysClockFreq() / 1000000);
   printf("Initializing, please wait ...\r\n");
 
-  // setup fpga programming
-  machSTM_hdl.addr7 = MACHXO_I2C_ADDR_7BIT;
-  machSTM_hdl.hi2c = &hi2c1;
-  machSTM_hdl.fpga_idx = 0;
-  machSTM_hdl.verbose = 0u;
+  // setup fpga the XO2 I2C handle used for FPGA programming 
+  s_xo2_i2c_handle.hi2c    = &hi2c1;
+  s_xo2_i2c_handle.verbose = 0;
+  s_xo2_i2c_handle.addr7   = MACHXO_I2C_ADDR_7BIT;
+  s_xo2_i2c_handle.mux_idx  = 0;
+  s_xo2_i2c_handle.mux_ch  = MUX_FPGA_SEED;
+
+  s_xo2_handle.cfgEn         = TRUE;
+  s_xo2_handle.devType       = MachXO2_2000;
+  s_xo2_handle.pI2CDrvrCalls = &s_xo2_i2c_handle;
+  s_xo2_handle.pfuSecDelay   = delay_us;   /* microsecond delay */
+  s_xo2_handle.pfmSecDelay   = delay_ms;   /* millisecond delay */
+
+  /* Register the handle with the command interface for page-by-page programming */
+  if_cmd_set_xo2_prog_handle(&s_xo2_handle);
 
   // configure TEC DAC
   printf("Initialize TEC DAC\r\n");
@@ -1467,6 +1481,30 @@ void HAL_TIM_OC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 	  if (htim->Instance == TIM3) {
 	  	  LSYNC_DelayElapsedCallback(htim);
 	  }
+}
+
+void HAL_I2C_MasterTxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c->Instance == I2C1)
+  {
+    MXO_I2C_MasterTxCpltCallback(hi2c);
+  }
+}
+
+void HAL_I2C_MasterRxCpltCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c->Instance == I2C1)
+  {
+    MXO_I2C_MasterRxCpltCallback(hi2c);
+  }
+}
+
+void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
+{
+  if (hi2c->Instance == I2C1)
+  {
+    MXO_I2C_ErrorCallback(hi2c);
+  }
 }
 
 /* USER CODE END 4 */

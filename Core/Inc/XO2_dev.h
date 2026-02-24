@@ -35,7 +35,8 @@
 #define XO2_FLASH_PAGE_SIZE (16)   /**< 16 bytes per page in Cfg and UFM sectors */
 #define XO2_FLASH_PAGES_LEN(n) (n * XO2_FLASH_PAGE_SIZE)   /**< Number of bytes in that many pages */
 #define LATTICE_XO2_NUM_DEVS 9
-#define LATTICE_FPGA_INSTALLED_NUM_DEVS 4
+
+// #define DEBUG_ECA 1
 
 typedef int Boolean_t;
 
@@ -60,6 +61,13 @@ typedef enum
 	MachXO2_7000       /**< XO2 7000 LUT device */
 } XO2Devices_t;
 
+typedef enum
+{
+	MUX_FPGA_SEED = 0,
+	MUX_FPGA_TA = 1,
+	MUX_FPGA_SAFE_EE = 2,
+	MUX_FPGA_SAFE_OPT = 3
+} XO2MuxChannel_t;
 
 /**
  * Mode of XO2 device operation during programming and erasing operations.
@@ -83,6 +91,18 @@ typedef enum
 } XO2SectorMode_t;
 
 
+
+/* Handle describing one MachXO2 target on an I2C bus */
+typedef struct
+{
+    I2C_HandleTypeDef *hi2c;   /* e.g. &hi2c1 */
+    uint8_t            verbose;
+    uint8_t            addr7;  /* 7-bit address, e.g. 0x40 */
+	uint8_t			   mux_idx;
+	uint8_t 		   mux_ch;
+} MachXO_Handle_t;
+
+
 /**
  * Device parameters needed for accessing and programming.
  */
@@ -96,31 +116,12 @@ typedef struct
 	int	       Trefresh;    /**< Used for pausing after FlashCheck command or Refresh command. */
 } XO2DevInfo_t;
 
-typedef struct 
-{
-	const char *pName;      /**< String for printing the XO2 devic epart number. */
-	int        mux_idx;     /**<  I2C MUX Index */
-	int        mux_channel; /**<  I2C MUX Channel */
-	int        device_idx;  /**<  Device type list index */
-} XO2FpgaInfo_t;
-
-
-/* Handle describing one MachXO2 target on an I2C bus */
-typedef struct
-{
-    I2C_HandleTypeDef *hi2c;   	/* e.g. &hi2c1 */
-	uint8_t	  		  fpga_idx;
-    uint8_t           verbose;
-    uint8_t           addr7;  	/* 7-bit address, e.g. 0x40 */
-} MachSTM_Handle_t;
-
-
 
 typedef struct
 {
 	Boolean_t		cfgEn;    /**< 1=Configuration Logic access is enabled, 0=not */
 	XO2Devices_t 	devType;     /**< XO2 part number for information about sizes and programming times */
-	MachSTM_Handle_t  *pI2CDrvr; /**< specific driver routines for framing commands and reading/writing commands. */
+	MachXO_Handle_t  *pI2CDrvrCalls; /**< specific driver routines for framing commands and reading/writing commands. */
 	void             (*pfuSecDelay)(uint32_t us);
 	void             (*pfmSecDelay)(uint32_t us);
 } XO2Handle_t;
@@ -149,8 +150,8 @@ typedef struct
 	unsigned int UFMDataSize;
 	unsigned int UserCode;
 	unsigned int SecurityFuses;
-	unsigned char *pCfgData;
-	unsigned char *pUFMData;
+	const unsigned char *pCfgData;
+	const unsigned char *pUFMData;
 	XO2FeatureRow_t *pFeatureRow;
 } XO2_JEDEC_t;
 
@@ -176,11 +177,5 @@ extern const XO2DevInfo_t XO2DevList[LATTICE_XO2_NUM_DEVS];
 
 #endif
 
-#ifndef XO2FPGALIST_DECLARATION
-// Prototype for device data base
-extern const XO2FpgaInfo_t XO2FpgaList[LATTICE_FPGA_INSTALLED_NUM_DEVS];
 
 #endif
-
-#endif
-

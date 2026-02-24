@@ -2,14 +2,13 @@
 
 #include "XO2_cmds.h"
 #include "tca9548a.h"
-#include "utils.h"
 
 
 volatile uint8_t txComplete = 0;
 volatile uint8_t rxComplete = 0;
 volatile uint8_t i2cError = 0;
 
-static inline uint16_t MachXO_Addr8(const MachSTM_Handle_t *h)
+static inline uint16_t MachXO_Addr8(const MachXO_Handle_t *h)
 {
     /* HAL expects 8-bit address = 7-bit << 1 */
     return (uint16_t)(h->addr7 << 1);
@@ -51,25 +50,17 @@ static int xi2c_write_and_read(I2C_HandleTypeDef *hi2c, uint16_t DevAddress, uin
 }
 
 
-uint32_t MachXO_CmdXfer(MachSTM_Handle_t *h,
+uint32_t MachXO_CmdXfer(MachXO_Handle_t *h,
                         const uint8_t *wbuf, int wcnt,
                         uint8_t *rbuf, int rcnt)
 {
-	int8_t mux_status = 0;
-    mux_status = TCA9548A_SelectChannel(XO2FpgaList[h->fpga_idx].mux_idx, XO2FpgaList[h->fpga_idx].mux_channel);
-	if (mux_status != TCA9548A_OK )
-	{
-		return ERROR;
-	}
-    delay_us(1);
-
     if (!h || !h->hi2c) return ERROR;
     if ((wcnt > 0) && (wbuf == NULL)) return ERROR;
     if ((rcnt > 0) && (rbuf == NULL)) return ERROR;
     if (wcnt < 0 || rcnt < 0) return ERROR;
 
     const uint16_t addr8 = MachXO_Addr8(h);
-
+	TCA9548A_SelectChannel(h->mux_idx, h->mux_idx);
     if (rcnt > 0) {
     	if(xi2c_write_and_read(h->hi2c, addr8, (uint8_t*)wbuf, (uint16_t)wcnt, rbuf, rcnt) != HAL_OK) {
     		return ERROR;
@@ -112,7 +103,7 @@ int XO2ECAcmd_readDevID(XO2Handle_t *pXO2, unsigned int *pVal)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 	
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 4);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 4);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=%x %x %x %x\r\n", status, data[0], data[1], data[2], data[3]);
@@ -158,7 +149,7 @@ int XO2ECAcmd_readUserCode(XO2Handle_t *pXO2, unsigned int *pVal)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 	
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 4);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 4);
 	
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=%x %x %x %x\r\n", status, data[0], data[1], data[2], data[3]);
@@ -217,7 +208,7 @@ int XO2ECAcmd_setUserCode(XO2Handle_t *pXO2, unsigned int val)
 	cmd[6] = (unsigned char)(val>>8);
 	cmd[7] = (unsigned char)(val);
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 8, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 8, NULL, 0);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d\r\n", status);
@@ -263,7 +254,7 @@ int XO2ECAcmd_readTraceID(XO2Handle_t *pXO2, unsigned char *pVal)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 	
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 8);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 8);
 	
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=", status);
@@ -322,7 +313,7 @@ int XO2ECAcmd_openCfgIF(XO2Handle_t *pXO2, XO2CfgMode_t mode)
 		cmd[0] = 0xC6;  // Enable Config  Interface in Offline Mode opcode		
 	}
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 3, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 3, NULL, 0);
 		
 	// Wait till not busy - we have entered Config mode
 	if (status == OK)
@@ -368,7 +359,7 @@ int XO2ECAcmd_closeCfgIF(XO2Handle_t *pXO2)
 	cmd[2] = 0x00;  // arg1
 //	cmd[3] = 0x00;  // arg2  not used now
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 3, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 3, NULL, 0);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d\r\n", status);
@@ -408,7 +399,7 @@ int XO2ECAcmd_Refresh(XO2Handle_t *pXO2)
 	cmd[2] = 0x00;  // arg1
 //	cmd[3] = 0x00;  // arg2 - not used now
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, NULL, 0);
 
 	if(status != OK) return status;
 
@@ -416,18 +407,18 @@ int XO2ECAcmd_Refresh(XO2Handle_t *pXO2)
 	// the XO2 device.
 
 	pXO2->pfmSecDelay(XO2DevList[pXO2->devType].Trefresh );
+	sr = 0xFFFFFFFFu;  /* sentinel: treat unread register as error */
+	status = XO2ECAcmd_readStatusReg(pXO2, &sr);
 
-
-	if (XO2ECAcmd_readStatusReg(pXO2, &sr) != OK)
+	if (status != OK)
 		return(ERROR);
-
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d   sr=%x\r\n", status, sr);
 #endif
 		
-	// Verify that only DONE bit is definitely set and not FAIL or BUSY or ISC_ENABLED
-	if ((sr & 0x3f00) == 0x0100)
+	/* Verify that only DONE bit is definitely set and not FAIL or BUSY or ISC_ENABLED */
+	if ((sr & 0x3000) == 0x0000)
 	{
 		pXO2->cfgEn = FALSE;
 		return(OK);
@@ -468,7 +459,7 @@ int XO2ECAcmd_setDone(XO2Handle_t *pXO2)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, NULL, 0);
 
 // TODO: This delay time may be excessive
 
@@ -527,7 +518,7 @@ int XO2ECAcmd_readStatusReg(XO2Handle_t *pXO2, unsigned int *pVal)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 4);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 4);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=%x %x %x %x\r\n", status, data[0], data[1], data[2], data[3]);
@@ -576,7 +567,7 @@ int XO2ECAcmd_waitStatusBusy(XO2Handle_t *pXO2)
 	loop = XO2ECA_CMD_LOOP_TIMEOUT;
 	do
 	{
-		status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 4);
+		status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 4);
 		
 		if (status != OK)
 			return(ERROR);
@@ -627,7 +618,7 @@ int XO2ECAcmd_readBusyFlag(XO2Handle_t *pXO2, unsigned char *pVal)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 	
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, &data, 1);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, &data, 1);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=%x\r\n", status, data);
@@ -677,7 +668,7 @@ int XO2ECAcmd_waitBusyFlag(XO2Handle_t *pXO2)
 	loop = XO2ECA_CMD_LOOP_TIMEOUT;
 	do
 	{		    	
-		status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 1);
+		status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 1);
 
 		if (status != OK)
 			return(ERROR);
@@ -721,7 +712,7 @@ int XO2ECAcmd_Bypass(XO2Handle_t *pXO2)
 //	cmd[2] = 0x00;  // arg1
 //	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 1, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 1, NULL, 0);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d\r\n", status);
@@ -796,7 +787,7 @@ int XO2ECAcmd_SetPage(XO2Handle_t *pXO2, XO2SectorMode_t mode, unsigned int page
 	cmd[6] = (unsigned char)(pageNum>>8);  // page[2] = page number MSB
 	cmd[7] = (unsigned char)pageNum;       // page[3] = page number LSB
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 8, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 8, NULL, 0);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d\r\n", status);
@@ -853,7 +844,7 @@ int XO2ECAcmd_EraseFlash(XO2Handle_t *pXO2, unsigned char mode)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, NULL, 0);
 
 	if (status == OK)
 	{
@@ -920,7 +911,7 @@ int XO2ECAcmd_CfgResetAddr(XO2Handle_t *pXO2)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, NULL, 0);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d\r\n", status);
@@ -976,7 +967,7 @@ int XO2ECAcmd_CfgReadPage(XO2Handle_t *pXO2, unsigned char *pBuf)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x01;  // arg2 = 1 page
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, XO2_FLASH_PAGE_SIZE);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, XO2_FLASH_PAGE_SIZE);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=", status);
@@ -1012,7 +1003,7 @@ int XO2ECAcmd_CfgReadPage(XO2Handle_t *pXO2, unsigned char *pBuf)
  * @note The number of pages written is not compared against the total pages in the
  * device.  Writing too far may have unexpected results.
  */
-int XO2ECAcmd_CfgWritePage(XO2Handle_t *pXO2, unsigned char *pBuf) 
+int XO2ECAcmd_CfgWritePage(XO2Handle_t *pXO2, const unsigned char *pBuf) 
 {
 	unsigned char cmd[4 + 16];
 	int status;
@@ -1039,7 +1030,7 @@ int XO2ECAcmd_CfgWritePage(XO2Handle_t *pXO2, unsigned char *pBuf)
 	for (i = 0; i < 16; i++)
 		cmd[4 + i] = pBuf[i];
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4 + 16, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4 + 16, NULL, 0);
 
 	if (status == OK)
 	{
@@ -1129,7 +1120,7 @@ int XO2ECAcmd_UFMResetAddr(XO2Handle_t *pXO2)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, NULL, 0);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d\r\n", status);
@@ -1191,7 +1182,7 @@ int XO2ECAcmd_UFMReadPage(XO2Handle_t *pXO2, unsigned char *pBuf)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x01;  // arg2 = 1 page
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 16);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 16);
 
 #ifdef DEBUG_ECA
 	printf("\tstatus=%d  data=", status);
@@ -1224,7 +1215,7 @@ int XO2ECAcmd_UFMReadPage(XO2Handle_t *pXO2, unsigned char *pBuf)
  * @see XO2ECAcmd_UFMErase
  * 
  */
-int XO2ECAcmd_UFMWritePage(XO2Handle_t *pXO2, unsigned char *pBuf) 
+int XO2ECAcmd_UFMWritePage(XO2Handle_t *pXO2, const unsigned char *pBuf) 
 {
 	unsigned char cmd[4 + 16];
 	int status;
@@ -1258,7 +1249,7 @@ int XO2ECAcmd_UFMWritePage(XO2Handle_t *pXO2, unsigned char *pBuf)
 	for (i = 0; i < 16; i++)
 		cmd[4 + i] = pBuf[i];
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4 + 16, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4 + 16, NULL, 0);
 
 	if (status == OK)
 	{
@@ -1375,7 +1366,7 @@ int XO2ECAcmd_FeatureRowWrite(XO2Handle_t *pXO2, XO2FeatureRow_t *pFeature)
 	for (i = 0; i < 8; i++)
 		cmd[4 + i] = pFeature->feature[i];
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 12, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 12, NULL, 0);
 	
 	if (status != OK)
 		return(ERROR);
@@ -1392,7 +1383,7 @@ int XO2ECAcmd_FeatureRowWrite(XO2Handle_t *pXO2, XO2FeatureRow_t *pFeature)
 	cmd[4] = pFeature->feabits[0];
 	cmd[5] = pFeature->feabits[1];
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 6, NULL, 0);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 6, NULL, 0);
 	
 	if (status == OK)
 	{
@@ -1448,7 +1439,7 @@ int XO2ECAcmd_FeatureRowRead(XO2Handle_t *pXO2, XO2FeatureRow_t *pFeature)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-	status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 8);
+	status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 8);
 
 	if (status != OK)
 		return(ERROR);
@@ -1462,7 +1453,7 @@ int XO2ECAcmd_FeatureRowRead(XO2Handle_t *pXO2, XO2FeatureRow_t *pFeature)
 	cmd[2] = 0x00;  // arg1
 	cmd[3] = 0x00;  // arg2
 
-    status = MachXO_CmdXfer(pXO2->pI2CDrvr, cmd, 4, data, 2);
+    status = MachXO_CmdXfer(pXO2->pI2CDrvrCalls, cmd, 4, data, 2);
 	
 	if (status != OK)
 		return(ERROR);
