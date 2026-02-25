@@ -13,7 +13,6 @@
 
 #include "XO2_dev.h"
 
-MachSTM_Handle_t machSTM_hdl;
 
 /**
  * Database of XO2 device parameters needed for accessing, erasing and programming 
@@ -34,20 +33,5 @@ const XO2DevInfo_t XO2DevList[LATTICE_XO2_NUM_DEVS] =
 	{"MachXO2-2000",  3200,   639,  1900, 900,		2},
 	{"MachXO2-2000U", 5760,   767,  3100, 1000,		3},
 	{"MachXO2-4000",  5760,   767,  3100, 1000,		3},
-	{"MachXO2-7000",  9216,  2046,  4800, 1600,		4}
+	{"MachXO2-7000",  9216,  2046,  4800, 1600,		50}
 }; 
-
-const XO2FpgaInfo_t XO2FpgaList[LATTICE_FPGA_INSTALLED_NUM_DEVS] = 
-{
-	// Name            MUX IDX 
-	//                   |     MUX IDX
-	//                   |             FPGA DEV IDX  
-	//                   |        |       |   
-	//                   |        |       |   
-	{"SEED FPGA",        0,       0,      5 },
-	{"TA FPGA",          0,       1,      5 },
-	{"SAFETY EE FPGA",   0,       2,      5 },
-	{"SAFETY OPT FPGA",  0,       3,      5 }
-}; 
-
-

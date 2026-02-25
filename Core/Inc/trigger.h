@@ -15,7 +15,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#define NUM_DARK_FRAMES_AT_START 5
+#define NUM_DARK_FRAMES_AT_START 10
 
 typedef struct {
     uint32_t frequencyHz;        // Trigger frequency in Hz 1 - 100

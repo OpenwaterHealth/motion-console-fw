@@ -50,11 +50,11 @@
  * @see XO2ECA_apiClearXO2()
  * 
  */
-int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED, int mode)
+int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mode)
 {
 	int status, ret;
 	unsigned int	i, j;
-	unsigned char *p;
+	const unsigned char *p;
 	unsigned char buf[XO2_FLASH_PAGE_SIZE];
 	int numPgs;
 	XO2FeatureRow_t featRow;
@@ -715,6 +715,3 @@ int XO2ECA_apiGetHdwStatus(XO2Handle_t *pXO2dev, unsigned int *pVal)
 	return(status);
 
 }
-
-
-

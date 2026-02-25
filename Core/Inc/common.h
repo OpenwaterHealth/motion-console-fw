@@ -80,6 +80,7 @@ typedef enum {
 	OW_JSON = 0xE5,
 	OW_I2C_PASSTHRU = 0xE9,
 	OW_CONTROLLER = 0xEA,
+	OW_FPGA_PROG = 0xEB,
 	OW_BAD_PARSE = 0xEC,
 	OW_BAD_CRC = 0xED,
 	OW_UNKNOWN = 0xEE,
@@ -139,6 +140,25 @@ typedef enum {
 	OW_CMD_NOP = 0x0E,
 	OW_CMD_RESET = 0x0F,
 } OWGlobalCommands;
+
+typedef enum {
+	OW_CMD_FPGA_PROG_OPEN          = 0x30, /* Open cfg interface in offline mode */
+	OW_CMD_FPGA_PROG_ERASE         = 0x31, /* Erase flash sectors (1-byte mode bitmap) */
+	OW_CMD_FPGA_PROG_CFG_RESET     = 0x32, /* Reset CFG address pointer */
+	OW_CMD_FPGA_PROG_CFG_WRITE_PAGE= 0x33, /* Write one 16-byte CFG page */
+	OW_CMD_FPGA_PROG_CFG_READ_PAGE = 0x34, /* Read back one 16-byte CFG page */
+	OW_CMD_FPGA_PROG_UFM_RESET     = 0x35, /* Reset UFM address pointer */
+	OW_CMD_FPGA_PROG_UFM_WRITE_PAGE= 0x36, /* Write one 16-byte UFM page */
+	OW_CMD_FPGA_PROG_UFM_READ_PAGE = 0x37, /* Read back one 16-byte UFM page */
+	OW_CMD_FPGA_PROG_FEATROW_WRITE = 0x38, /* Write feature row (8 feature + 2 feabits) */
+	OW_CMD_FPGA_PROG_FEATROW_READ  = 0x39, /* Read back feature row (returns 10 bytes) */
+	OW_CMD_FPGA_PROG_SET_DONE      = 0x3A, /* Set DONE bit */
+	OW_CMD_FPGA_PROG_REFRESH       = 0x3B, /* Refresh / boot from flash */
+	OW_CMD_FPGA_PROG_CLOSE         = 0x3C, /* Close cfg interface (abort path) */
+	OW_CMD_FPGA_PROG_CFG_WRITE_PAGES = 0x3D, /* Write N 16-byte CFG pages (N*16 bytes payload) */
+	OW_CMD_FPGA_PROG_UFM_WRITE_PAGES = 0x3E, /* Write N 16-byte UFM pages (N*16 bytes payload) */
+	OW_CMD_FPGA_PROG_READ_STATUS     = 0x3F, /* Read 32-bit Status Register (returns 4 bytes) */
+} OWProgFPGACommands;
 
 typedef struct  {
 	uint16_t id;

@@ -8,6 +8,7 @@
 #include "main.h"
 #include "common.h"
 #include "uart_comms.h"
+#include "if_fpga_prog.h"
 #include "utils.h"
 #include "tca9548a.h"
 #include "trigger.h"
@@ -502,7 +503,10 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
         }
         break;
     case OW_CONTROLLER:
-        return process_controller_command(uartResp, cmd);
+        return process_controller_command(uartResp, cmd);    
+    case OW_FPGA_PROG:
+        return process_fpga_prog_command(uartResp, cmd);
+        break;
     default:
         uartResp->data_len = 0;
         uartResp->packet_type = OW_UNKNOWN;

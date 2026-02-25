@@ -25,7 +25,7 @@
 #define NOT_IMPLEMENTED_ERR   (-1000)
 
 
-int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED, int mode);
+int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mode);
 
 int XO2ECA_apiClearXO2(XO2Handle_t *pXO2dev);
 
@@ -51,4 +51,3 @@ int XO2ECA_apiGetHdwInfo(XO2Handle_t *pXO2dev, XO2RegInfo_t *pInfo);
 
 
 #endif
-
