@@ -303,7 +303,7 @@ int main(void)
   s_xo2_handle.devType       = MachXO2_2000;
   s_xo2_handle.pI2CDrvrCalls = &s_xo2_i2c_handle;
   s_xo2_handle.pfuSecDelay   = delay_us;   /* microsecond delay */
-  s_xo2_handle.pfmSecDelay   = delay_ms;   /* millisecond delay */
+  s_xo2_handle.pfmSecDelay   = HAL_Delay;   /* millisecond delay */
 
   /* Register the handle with the command interface for page-by-page programming */
   if_cmd_set_xo2_prog_handle(&s_xo2_handle);
