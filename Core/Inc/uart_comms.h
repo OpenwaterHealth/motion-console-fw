@@ -14,7 +14,7 @@
 #include <stdbool.h>
 
 void comms_init(void);
-void comms_receive_task(void *argument);
+void comms_process(void);
 void comms_handle_RxCpltCallback(UART_HandleTypeDef *huart, uint16_t Size);
 void comms_handle_TxCallback(UART_HandleTypeDef *huart);
 void comms_handle_ErrorCallback(UART_HandleTypeDef *huart);

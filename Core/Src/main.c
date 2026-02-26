@@ -15,11 +15,10 @@
   *
   ******************************************************************************
   */
+ #include "version.h"
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include "version.h"
 #include "main.h"
-#include "cmsis_os.h"
 #include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
@@ -82,6 +81,7 @@ SPI_HandleTypeDef hspi4;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim12;
 TIM_HandleTypeDef htim15;
 
@@ -89,13 +89,6 @@ UART_HandleTypeDef huart4;
 DMA_HandleTypeDef hdma_uart4_rx;
 DMA_HandleTypeDef hdma_uart4_tx;
 
-/* Definitions for defaultTask */
-osThreadId_t defaultTaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
-  .name = "defaultTask",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
 /* USER CODE BEGIN PV */
 
 uint8_t rxBuffer[COMMAND_MAX_SIZE];
@@ -137,8 +130,7 @@ static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_SPI4_Init(void);
-void StartDefaultTask(void *argument);
-
+static void MX_TIM8_Init(void);
 /* USER CODE BEGIN PFP */
 
 #ifdef SCAN_DISPLAY
@@ -264,6 +256,7 @@ int main(void)
   MX_SPI2_Init();
   MX_SPI3_Init();
   MX_SPI4_Init();
+  MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
 
   init_dma_logging();
@@ -435,51 +428,17 @@ int main(void)
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
 
+  // Init USB
+  MX_USB_DEVICE_Init();
+  HAL_Delay(150);
+
   // Enable USB HUB
   HAL_GPIO_WritePin(HUB_RESET_GPIO_Port, HUB_RESET_Pin, GPIO_PIN_SET);
-  HAL_Delay(250);
+  HAL_Delay(100);
 
-  /* USER CODE END 2 */
-
-  /* Init scheduler */
-  osKernelInitialize();
-
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-
-  /* USER CODE BEGIN RTOS_THREADS */
   comms_init();
 
-
-  LED_RGB_SET(LED_GREEN); // Green - happy
-
-  /* USER CODE END RTOS_THREADS */
-
-  /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
-
-  /* Start scheduler */
-  osKernelStart();
-
-  /* We should never get here as control is now taken by the scheduler */
+  /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -488,6 +447,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    comms_process();
+    
   }
   /* USER CODE END 3 */
 }
@@ -1166,6 +1127,53 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief TIM8 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM8_Init(void)
+{
+
+  /* USER CODE BEGIN TIM8_Init 0 */
+
+  /* USER CODE END TIM8_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM8_Init 1 */
+
+  /* USER CODE END TIM8_Init 1 */
+  htim8.Instance = TIM8;
+  htim8.Init.Prescaler = 12000-1;
+  htim8.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim8.Init.Period = 2500-1;
+  htim8.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim8.Init.RepetitionCounter = 0;
+  htim8.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim8) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim8, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger2 = TIM_TRGO2_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim8, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM8_Init 2 */
+
+  /* USER CODE END TIM8_Init 2 */
+
+}
+
+/**
   * @brief TIM12 Initialization Function
   * @param None
   * @retval None
@@ -1315,10 +1323,10 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Stream0_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
   /* DMA1_Stream1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 5, 0);
+  HAL_NVIC_SetPriority(DMA1_Stream1_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Stream1_IRQn);
 
 }
@@ -1349,9 +1357,6 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOE, nTRIG_Pin|TECDAC_SS_Pin|TA_CS_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
-  // HAL_GPIO_WritePin(SYS_EN_GPIO_Port, SYS_EN_Pin, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, EE_CS_Pin|IO_EXP_RSTN_Pin|IND1_Pin|enSyncOUT_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
@@ -1380,12 +1385,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SYS_EN_Pin SEED_CS_Pin OPT_CS_Pin */
-  GPIO_InitStruct.Pin = SEED_CS_Pin|OPT_CS_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  /*Configure GPIO pin : SYS_EN_Pin */
+  GPIO_InitStruct.Pin = SYS_EN_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  HAL_GPIO_Init(SYS_EN_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : EE_CS_Pin SCL_CFG_Pin IO_EXP_RSTN_Pin IND1_Pin
                            enSyncOUT_Pin */
@@ -1436,6 +1440,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_IT_RISING;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(BRD_V1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : SEED_CS_Pin OPT_CS_Pin */
+  GPIO_InitStruct.Pin = SEED_CS_Pin|OPT_CS_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
   /* USER CODE END MX_GPIO_Init_2 */
@@ -1508,28 +1519,6 @@ void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c)
 }
 
 /* USER CODE END 4 */
-
-/* USER CODE BEGIN Header_StartDefaultTask */
-/**
-  * @brief  Function implementing the defaultTask thread.
-  * @param  argument: Not used
-  * @retval None
-  */
-/* USER CODE END Header_StartDefaultTask */
-void StartDefaultTask(void *argument)
-{
-  /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
-  /* USER CODE BEGIN 5 */
-  printf("USB started\r\n");
-  /* Infinite loop */
-
-  for(;;)
-  {
-	osDelay(5000);
-  }
-  /* USER CODE END 5 */
-}
 
  /* MPU Configuration */
 
