@@ -290,6 +290,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->addr = cmd->addr;
             uartResp->reserved = cmd->reserved;
 
+#if 0
             TCA9548A_SelectChannel(1, 1);
 
             consoleTemps.f.t1 = MAX31875_ReadTemperature(MAX31875_TEMP1_DEV_ADDR);
@@ -298,6 +299,16 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 
             uartResp->data_len    = sizeof(consoleTemps.bytes);
             uartResp->data = consoleTemps.bytes;
+#endif /* 0 */
+
+            {
+                /* Drain the telemetry ring buffer — up to 1024 bytes of samples. */
+                static TelemetrySample s_telem_resp_buf[1024U / sizeof(TelemetrySample)];
+                size_t n = telemetry_read(s_telem_resp_buf,
+                                          sizeof(s_telem_resp_buf) / sizeof(TelemetrySample));
+                uartResp->data_len = (uint16_t)(n * sizeof(TelemetrySample));
+                uartResp->data     = (uint8_t *)s_telem_resp_buf;
+            }
 
             break;
         case OW_CTRL_TEC_STATUS:

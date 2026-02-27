@@ -19,9 +19,19 @@
 #include "led_driver.h"
 #include "if_commands.h"
 
+#include "lwrb.h"
 #include <string.h>
 
 #define PDU_N 16
+
+/* ---------------------------------------------------------------------------
+ * Telemetry ring buffer — backing store and runtime state
+ * ---------------------------------------------------------------------------*/
+#define TELEMETRY_BUF_BYTES  (TELEMETRY_RING_SAMPLES * sizeof(TelemetrySample))
+static uint8_t          s_rb_storage[TELEMETRY_BUF_BYTES];
+static lwrb_t           s_telemetry_rb;
+static volatile uint8_t s_telemetry_tick = 0; /* set by timer ISR */
+static uint32_t         s_last_poll_ms   = 0;
 
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
@@ -197,6 +207,94 @@ NextDataPacket:
 	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
 }
 
+/* ---------------------------------------------------------------------------
+ * Telemetry API
+ * ---------------------------------------------------------------------------*/
+
+/** Called from a hardware timer ISR — just sets a flag, no I2C in the ISR. */
+void comms_telemetry_tick(void)
+{
+	s_telemetry_tick = 1;
+}
+
+/** Returns the number of complete TelemetrySamples waiting in the ring buffer. */
+size_t telemetry_available(void)
+{
+	return lwrb_get_full(&s_telemetry_rb) / sizeof(TelemetrySample);
+}
+
+/** Reads up to @p count samples into @p out; returns actual number read. */
+size_t telemetry_read(TelemetrySample *out, size_t count)
+{
+	if (!out || !count) return 0;
+	size_t avail   = lwrb_get_full(&s_telemetry_rb) / sizeof(TelemetrySample);
+	size_t to_read = (count < avail) ? count : avail;
+	return lwrb_read(&s_telemetry_rb, out, to_read * sizeof(TelemetrySample))
+	       / sizeof(TelemetrySample);
+}
+
+/**
+ * @brief  Main-loop telemetry worker.
+ *
+ * Runs every TELEMETRY_POLL_INTERVAL_MS or immediately when
+ * comms_telemetry_tick() has been called from a timer ISR.
+ * Reads temperatures and TEC ADC, updates consoleTemps, then
+ * pushes a TelemetrySample into the ring buffer.  Oldest samples
+ * are silently discarded if the consumer falls behind.
+ */
+void telemetry_poll(void)
+{
+	uint32_t now = HAL_GetTick();
+
+	/* skip unless the timer fired or the fallback interval has elapsed */
+	if (!s_telemetry_tick &&
+	    (now - s_last_poll_ms) < TELEMETRY_POLL_INTERVAL_MS) {
+		return;
+	}
+	s_telemetry_tick = 0;
+	s_last_poll_ms   = now;
+
+	TelemetrySample sample = {0};
+	sample.timestamp_ms = now;
+
+	/* --- begin timed acquisition --- */
+	uint32_t dwt_start = DWT->CYCCNT;
+
+	/* Temperatures — sensors sit behind mux 1 channel 1 */
+	TCA9548A_SelectChannel(1, 1);
+	sample.t1 = MAX31875_ReadTemperature(MAX31875_TEMP1_DEV_ADDR);
+	sample.t2 = MAX31875_ReadTemperature(MAX31875_TEMP2_DEV_ADDR);
+	sample.t3 = MAX31875_ReadTemperature(MAX31875_TEMP3_DEV_ADDR);
+
+	/* Keep the shared console-temp struct in sync */
+	consoleTemps.f.t1 = sample.t1;
+	consoleTemps.f.t2 = sample.t2;
+	consoleTemps.f.t3 = sample.t3;
+
+	/* TEC ADC — four channels on ads7924.
+	 * Use aligned locals to avoid -Waddress-of-packed-member on the
+	 * packed struct members, then copy into the sample. */
+	uint16_t tec_raw[4] = {0};
+	ADS7924_ReadRaw(&tec_ads, ADS7924_CH0, &tec_raw[0], 10);
+	ADS7924_ReadRaw(&tec_ads, ADS7924_CH1, &tec_raw[1], 10);
+	ADS7924_ReadRaw(&tec_ads, ADS7924_CH2, &tec_raw[2], 10);
+	ADS7924_ReadRaw(&tec_ads, ADS7924_CH3, &tec_raw[3], 10);
+	sample.tec_adc[0] = tec_raw[0];
+	sample.tec_adc[1] = tec_raw[1];
+	sample.tec_adc[2] = tec_raw[2];
+	sample.tec_adc[3] = tec_raw[3];
+
+	/* --- end timed acquisition --- */
+	uint32_t dwt_cycles = DWT->CYCCNT - dwt_start;
+	sample.acq_time_us  = dwt_cycles / (SystemCoreClock / 1000000U);
+
+	/* Evict oldest sample if ring buffer is full */
+	if (lwrb_get_free(&s_telemetry_rb) < sizeof(TelemetrySample)) {
+		lwrb_skip(&s_telemetry_rb, sizeof(TelemetrySample));
+	}
+	lwrb_write(&s_telemetry_rb, &sample, sizeof(TelemetrySample));
+}
+
 void comms_init(void) {
 	printf("Initilize comms (no-RTOS)\r\n");
 
@@ -208,6 +306,11 @@ void comms_init(void) {
 	tx_busy = 0;
 	tx_flag = 0;
 	rx_flag = 0;
+
+	/* initialize telemetry ring buffer */
+	lwrb_init(&s_telemetry_rb, s_rb_storage, sizeof(s_rb_storage));
+	s_telemetry_tick = 0;
+	s_last_poll_ms   = HAL_GetTick();
 
 	CDC_FlushRxBuffer_FS();
 	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);

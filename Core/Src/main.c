@@ -81,6 +81,7 @@ SPI_HandleTypeDef hspi4;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
+TIM_HandleTypeDef htim4;  /* 250 ms telemetry poll timer */
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim12;
 TIM_HandleTypeDef htim15;
@@ -130,6 +131,7 @@ static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_SPI4_Init(void);
+static void MX_TIM4_Init(void);
 static void MX_TIM8_Init(void);
 /* USER CODE BEGIN PFP */
 
@@ -256,6 +258,7 @@ int main(void)
   MX_SPI2_Init();
   MX_SPI3_Init();
   MX_SPI4_Init();
+  MX_TIM4_Init();
   MX_TIM8_Init();
   /* USER CODE BEGIN 2 */
 
@@ -437,6 +440,8 @@ int main(void)
   HAL_Delay(100);
 
   comms_init();
+  /* Start TIM4 interrupt for telemetry polling (250 ms) */
+  HAL_TIM_Base_Start_IT(&htim4);
 
   /* USER CODE END 2 */
 
@@ -448,7 +453,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     comms_process();
-    
+    telemetry_poll();
   }
   /* USER CODE END 3 */
 }
@@ -1223,6 +1228,46 @@ static void MX_TIM12_Init(void)
   * @param None
   * @retval None
   */
+/**
+  * @brief TIM4 Initialization — 250 ms periodic telemetry tick
+  * @note  TIM4 is on APB1. With HCLK=120 MHz and APB1_DIV1,
+  *        the TIM4 clock is 120 MHz.
+  *        PSC=12000-1 => 10 kHz tick; ARR=2500-1 => 250 ms period.
+  */
+static void MX_TIM4_Init(void)
+{
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig      = {0};
+
+  __HAL_RCC_TIM4_CLK_ENABLE();
+
+  htim4.Instance               = TIM4;
+  htim4.Init.Prescaler         = 12000U - 1U;
+  htim4.Init.CounterMode       = TIM_COUNTERMODE_UP;
+  htim4.Init.Period            = 2500U - 1U;
+  htim4.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /* Enable TIM4 update interrupt in NVIC */
+  HAL_NVIC_SetPriority(TIM4_IRQn, 10, 0);
+  HAL_NVIC_EnableIRQ(TIM4_IRQn);
+}
+
 static void MX_TIM15_Init(void)
 {
 
@@ -1561,7 +1606,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
   /* USER CODE BEGIN Callback 0 */
   if (htim->Instance == TIM4) {
-
+    comms_telemetry_tick();
   }
   if (htim->Instance == FSYNC_TIMER.Instance) {
     FSYNC_PeriodElapsedCallback(htim);
