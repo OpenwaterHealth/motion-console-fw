@@ -252,6 +252,44 @@ void motion_cfg_apply_settings(void)
         memcpy(tmpval, json_str + val_start, copy_len);
         tmpval[copy_len] = '\0';
 
+        // Try generic FPGA register write if key matches a register friendly name
+        char keybuf[64];
+        int key_copy_len = (key_len < (int)sizeof(keybuf) - 1) ? key_len : (int)sizeof(keybuf) - 1;
+        memcpy(keybuf, json_str + key_start, key_copy_len);
+        keybuf[key_copy_len] = '\0';
+
+        const FpgaRegister *reg = fpga_register_lookup(keybuf);
+        if (reg != NULL) {
+          if (reg->direction == FPGA_DIR_RD) {
+          printf("%s is read-only, skipping write\r\n", keybuf);
+          continue;
+          }
+
+          double val = strtod(tmpval, NULL);
+          double scale = (reg->scale != 0.0f) ? (double)reg->scale : 1.0;
+          double scaled = val / scale;
+          if (scaled < 0) scaled = 0; // clamp
+
+          uint32_t raw = (uint32_t)(scaled + 0.5);
+          uint8_t data_buf[4] = {0,0,0,0};
+          /* copy least-significant bytes of raw into buffer (little-endian) */
+          if (reg->data_len > 4) {
+            /* limit to 4 bytes to avoid overflow */
+            printf("Warning: data_len %u > 4, truncating\r\n", reg->data_len);
+          }
+          for (uint8_t b = 0; b < reg->data_len && b < 4; b++) {
+            data_buf[b] = (uint8_t)((raw >> (8*b)) & 0xFF);
+          }
+
+          int8_t wret = TCA9548A_Write_Data(reg->muxIdx, reg->channel, reg->i2cAddr, reg->offset, reg->data_len, data_buf);
+          if (wret != TCA9548A_OK) {
+            printf("ERROR writing %s to FPGA (ret=%d)\r\n", keybuf, (int)wret);
+          } else {
+            printf("Wrote %s -> raw=0x%08lX (len=%u)\r\n", keybuf, (unsigned long)raw, reg->data_len);
+          }
+          continue;
+        }
+
         // TEC_TRIP (integer)
         if (key_len == (int)strlen("TEC_TRIP") &&
             strncmp(json_str + key_start, "TEC_TRIP", key_len) == 0) {
@@ -263,51 +301,6 @@ void motion_cfg_apply_settings(void)
           continue;
         }
 
-        // OPT_GAIN
-        if ((key_len == (int)strlen("OPT_GAIN") &&
-             strncmp(json_str + key_start, "OPT_GAIN", key_len) == 0)) {
-          double v = strtod(tmpval, NULL);
-          OPT_GAIN_VALUE = v;
-          printf("OPT_GAIN_VALUE found: %.6f\r\n", OPT_GAIN_VALUE);
-          continue;
-        }
-
-        // OPT_THRESH
-        if ((key_len == (int)strlen("OPT_THRESH") &&
-             strncmp(json_str + key_start, "OPT_THRESH", key_len) == 0)) {
-          unsigned long v = strtoul(tmpval, NULL, 10);
-          OPT_THRESH_VALUE = (uint16_t)v;
-          printf("OPT_THRESH found: %u\r\n", (unsigned)OPT_THRESH_VALUE);
-
-          int8_t ret = TCA9548A_Write_Data(1, 7, 0x41, 0x10, 2, (uint8_t*)&OPT_THRESH_VALUE);
-          if (ret != TCA9548A_OK) {
-              printf("ERROR setting OPT_THRESH_VALUE\r\n");
-          }
-          continue;
-        }
-
-        // EE_GAIN
-        if ((key_len == (int)strlen("EE_GAIN") &&
-             strncmp(json_str + key_start, "EE_GAIN", key_len) == 0)) {
-          double v = strtod(tmpval, NULL);
-          EE_GAIN_VALUE = v;
-          printf("EE_GAIN_VALUE found: %.6f\r\n", EE_GAIN_VALUE);
-          continue;
-        }
-
-        // EE_THRESH
-        if ((key_len == (int)strlen("EE_THRESH") &&
-             strncmp(json_str + key_start, "EE_THRESH", key_len) == 0)) {
-          unsigned long v = strtoul(tmpval, NULL, 10);
-          EE_THRESH_VALUE = (uint16_t)v;
-          printf("EE_THRESH found: %u\r\n", (unsigned)EE_THRESH_VALUE);
-
-          int8_t ret = TCA9548A_Write_Data(1, 6, 0x41, 0x10, 2, (uint8_t*)&EE_THRESH_VALUE);
-          if (ret != TCA9548A_OK) {
-              printf("ERROR setting EE_THRESH_VALUE\r\n");
-          }
-          continue;
-        }
       }
     } else {
       printf("Failed to parse JSON or no object found\n");
