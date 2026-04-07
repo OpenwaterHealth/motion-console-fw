@@ -39,6 +39,7 @@
 #include "XO2_cmds.h"
 #include "if_fpga_prog.h"
 #include "motion_config.h"
+#include "fpga_register_map.h"
 #include "jsmn.h"
 #include "utils.h"
 #include "msg_queue.h"
