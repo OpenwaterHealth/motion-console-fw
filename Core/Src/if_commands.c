@@ -139,13 +139,15 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->reserved = LED_RGB_GET();
             break;
         case OW_CTRL_SET_FAN:
-            /* The three fan lines exposed in the host UI are read-only
-             * PWM-feedback inputs; there is no console-side fan drive to
-             * configure. Reject SET_FAN so the host knows. */
             uartResp->command = OW_CTRL_SET_FAN;
-            uartResp->packet_type = OW_ERROR;
-            uartResp->data_len = 0;
-            uartResp->data = NULL;
+            if(cmd->addr > 1 || cmd->data_len != 1){
+                uartResp->packet_type = OW_ERROR;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+            }else{
+                printf("Set fan to: %d\r\n", cmd->data[0]);
+                FAN_SetManualPWM(&fan, cmd->data[0]);
+            }
             break;
         case OW_CTRL_GET_FAN:
             uartResp->command = OW_CTRL_GET_FAN;
