@@ -115,6 +115,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/uart_comms.c
     Core/Src/flash_eeprom.c
     Core/Src/motion_config.c
+    Core/Src/fpga_register_map.c
     Core/Src/utils.c
 )
 
