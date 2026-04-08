@@ -48,20 +48,22 @@ extern bool _enter_dfu;
 
 extern ad5761r_dev tec_dac;
 
-static uint8_t last_fan_speed = 0;
+static uint8_t last_fan_rpm[2] = {0, 0};
 
-/* The three fans expose a PWM feedback signal on dedicated GPIO inputs:
+/* The three fans expose a tach feedback signal on dedicated GPIO inputs:
  *   index 1 -> FAN_TOP_GD2 (PE1)
  *   index 2 -> FAN_TOP_GD3 (PE14)
  *   index 3 -> FAN_TOP_GD4 (PE15)
- * Pins are configured as plain inputs in MX_GPIO_Init. We sample the
- * line in a tight loop over a fixed window and report the % time-high
- * as a 0..100 duty value. Window is long enough to average several
- * cycles of typical fan PWM-feedback frequencies (tens of Hz to a
- * few kHz). */
-#define FAN_DUTY_SAMPLE_MS  50U
+ * The line is a ~50% duty square wave at 2 pulses per revolution; the
+ * useful information is the frequency, not the duty cycle. We count
+ * rising edges in a fixed sample window and convert to RPM.
+ *
+ * An unplugged fan sits high (board pull-up) with no edges, which
+ * naturally gives 0 RPM. */
+#define FAN_SAMPLE_MS        100U
+#define FAN_PULSES_PER_REV   2U
 
-static uint8_t fan_measure_duty(uint8_t index)
+static uint16_t fan_measure_rpm(uint8_t index)
 {
     GPIO_TypeDef *port;
     uint16_t pin;
@@ -71,14 +73,23 @@ static uint8_t fan_measure_duty(uint8_t index)
         case 3: port = FAN_TOP_GD4_GPIO_Port; pin = FAN_TOP_GD4_Pin; break;
         default: return 0;
     }
-    uint32_t high = 0, total = 0;
+
+    uint32_t edges = 0;
+    GPIO_PinState prev = HAL_GPIO_ReadPin(port, pin);
     uint32_t start = HAL_GetTick();
-    while ((HAL_GetTick() - start) < FAN_DUTY_SAMPLE_MS) {
-        if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_SET) high++;
-        total++;
+    while ((HAL_GetTick() - start) < FAN_SAMPLE_MS) {
+        GPIO_PinState now = HAL_GPIO_ReadPin(port, pin);
+        if (now == GPIO_PIN_SET && prev == GPIO_PIN_RESET) {
+            edges++;
+        }
+        prev = now;
     }
-    if (total == 0) return 0;
-    return (uint8_t)((high * 100U) / total);
+
+    /* edges over FAN_SAMPLE_MS -> Hz = edges * (1000 / FAN_SAMPLE_MS)
+     * RPM = Hz * 60 / pulses_per_rev */
+    uint32_t rpm = (edges * (1000U / FAN_SAMPLE_MS) * 60U) / FAN_PULSES_PER_REV;
+    if (rpm > 0xFFFFU) rpm = 0xFFFFU;
+    return (uint16_t)rpm;
 }
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
@@ -156,9 +167,11 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             }else{
-                last_fan_speed = fan_measure_duty(cmd->addr);
-                uartResp->data_len = 1;
-                uartResp->data = &last_fan_speed;
+                uint16_t rpm = fan_measure_rpm(cmd->addr);
+                last_fan_rpm[0] = (uint8_t)(rpm & 0xFF);
+                last_fan_rpm[1] = (uint8_t)((rpm >> 8) & 0xFF);
+                uartResp->data_len = 2;
+                uartResp->data = last_fan_rpm;
             }
             break;
         case OW_CTRL_I2C_RD:

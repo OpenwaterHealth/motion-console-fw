@@ -127,7 +127,7 @@ Examples include:
 | `OW_CTRL_START_TRIG` | Start/arm trigger operation             |
 | `OW_CTRL_STOP_TRIG`  | Stop/disarm trigger operation           |
 | `OW_CTRL_SET_FAN`    | Set MAX6663 fan PWM. `addr` must be 0 or 1; 1-byte payload = duty 0..100. |
-| `OW_CTRL_GET_FAN`    | Read measured PWM-feedback duty for one fan. `addr` selects fan 1..3 (FAN_TOP_GD2/GD3/GD4 = PE1/PE14/PE15); response is 1 byte = duty 0..100 sampled over a ~50 ms window. |
+| `OW_CTRL_GET_FAN`    | Read measured fan tach for one fan. `addr` selects fan 1..3 (FAN_TOP_GD2/GD3/GD4 = PE1/PE14/PE15); response is 2 bytes little-endian uint16 = RPM (assumes 2 pulses/rev), sampled over a ~100 ms window. 0 = no signal / unplugged. |
 | `OW_CTRL_I2C_RD`     | Perform I2C read transaction            |
 | `OW_CTRL_I2C_WR`     | Perform I2C write transaction           |
 | `OW_CTRL_GET_FSYNC`  | Read frame sync (FSYNC) status          |
