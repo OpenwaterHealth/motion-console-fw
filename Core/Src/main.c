@@ -292,11 +292,21 @@ void motion_cfg_apply_settings(void)
 
         // TEC_TRIP (integer)
         if (key_len == (int)strlen("TEC_TRIP") &&
-            strncmp(json_str + key_start, "TEC_TRIP", key_len) == 0) {
-          int TEC_TRIP = (int)strtoul(tmpval, NULL, 10);
-          printf("TEC_TRIP found: %d\r\n", TEC_TRIP);
-          double r_th = temperature_to_resistance((double)TEC_TRIP);
+          strncmp(json_str + key_start, "TEC_TRIP", key_len) == 0) {
+
+          char *endptr;
+          double TEC_TRIP = strtod(tmpval, &endptr);
+
+          if (endptr == tmpval) {
+              printf("Invalid TEC_TRIP value: %s\r\n", tmpval);
+              continue;
+          }
+
+          printf("TEC_TRIP found: %.3f\r\n", TEC_TRIP);
+
+          double r_th = temperature_to_resistance(TEC_TRIP);
           TEC_TRIP_VALUE = solve_v(r_th);
+
           printf("R_TH: %.2f Ohms -> Voltage: %.3f V\r\n", r_th, TEC_TRIP_VALUE);
           continue;
         }
