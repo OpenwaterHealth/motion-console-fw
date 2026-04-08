@@ -49,6 +49,37 @@ extern bool _enter_dfu;
 extern ad5761r_dev tec_dac;
 
 static uint8_t last_fan_speed = 0;
+
+/* The three fans expose a PWM feedback signal on dedicated GPIO inputs:
+ *   index 1 -> FAN_TOP_GD2 (PE1)
+ *   index 2 -> FAN_TOP_GD3 (PE14)
+ *   index 3 -> FAN_TOP_GD4 (PE15)
+ * Pins are configured as plain inputs in MX_GPIO_Init. We sample the
+ * line in a tight loop over a fixed window and report the % time-high
+ * as a 0..100 duty value. Window is long enough to average several
+ * cycles of typical fan PWM-feedback frequencies (tens of Hz to a
+ * few kHz). */
+#define FAN_DUTY_SAMPLE_MS  50U
+
+static uint8_t fan_measure_duty(uint8_t index)
+{
+    GPIO_TypeDef *port;
+    uint16_t pin;
+    switch(index) {
+        case 1: port = FAN_TOP_GD2_GPIO_Port; pin = FAN_TOP_GD2_Pin; break;
+        case 2: port = FAN_TOP_GD3_GPIO_Port; pin = FAN_TOP_GD3_Pin; break;
+        case 3: port = FAN_TOP_GD4_GPIO_Port; pin = FAN_TOP_GD4_Pin; break;
+        default: return 0;
+    }
+    uint32_t high = 0, total = 0;
+    uint32_t start = HAL_GetTick();
+    while ((HAL_GetTick() - start) < FAN_DUTY_SAMPLE_MS) {
+        if (HAL_GPIO_ReadPin(port, pin) == GPIO_PIN_SET) high++;
+        total++;
+    }
+    if (total == 0) return 0;
+    return (uint8_t)((high * 100U) / total);
+}
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
@@ -108,24 +139,22 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->reserved = LED_RGB_GET();
             break;
         case OW_CTRL_SET_FAN:
+            /* The three fan lines exposed in the host UI are read-only
+             * PWM-feedback inputs; there is no console-side fan drive to
+             * configure. Reject SET_FAN so the host knows. */
             uartResp->command = OW_CTRL_SET_FAN;
-            if(cmd->addr > 1 || cmd->data_len != 1){
-                uartResp->packet_type = OW_ERROR;
-                uartResp->data_len = 0;
-                uartResp->data = NULL;
-            }else{
-                printf("Set fan to: %d\r\n", cmd->data[0]);
-                FAN_SetManualPWM(&fan, cmd->data[0]);
-            }
+            uartResp->packet_type = OW_ERROR;
+            uartResp->data_len = 0;
+            uartResp->data = NULL;
             break;
         case OW_CTRL_GET_FAN:
             uartResp->command = OW_CTRL_GET_FAN;
-            if(cmd->addr > 1){
+            if(cmd->addr < 1 || cmd->addr > 3){
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             }else{
-                last_fan_speed = FAN_GetPWMDuty(&fan);
+                last_fan_speed = fan_measure_duty(cmd->addr);
                 uartResp->data_len = 1;
                 uartResp->data = &last_fan_speed;
             }

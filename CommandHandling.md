@@ -126,8 +126,8 @@ Examples include:
 | `OW_CTRL_GET_TRIG`   | Read current trigger configuration      |
 | `OW_CTRL_START_TRIG` | Start/arm trigger operation             |
 | `OW_CTRL_STOP_TRIG`  | Stop/disarm trigger operation           |
-| `OW_CTRL_SET_FAN`    | Set fan speed or enable state           |
-| `OW_CTRL_GET_FAN`    | Get fan speed and status                |
+| `OW_CTRL_SET_FAN`    | Reserved. Always returns `OW_ERROR` — the three fan lines are read-only PWM-feedback inputs with no console-side drive. |
+| `OW_CTRL_GET_FAN`    | Read measured PWM-feedback duty for one fan. `addr` selects fan 1..3 (FAN_TOP_GD2/GD3/GD4 = PE1/PE14/PE15); response is 1 byte = duty 0..100 sampled over a ~50 ms window. |
 | `OW_CTRL_I2C_RD`     | Perform I2C read transaction            |
 | `OW_CTRL_I2C_WR`     | Perform I2C write transaction           |
 | `OW_CTRL_GET_FSYNC`  | Read frame sync (FSYNC) status          |
