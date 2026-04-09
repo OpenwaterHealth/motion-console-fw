@@ -48,7 +48,49 @@ extern bool _enter_dfu;
 
 extern ad5761r_dev tec_dac;
 
-static uint8_t last_fan_speed = 0;
+static uint8_t last_fan_rpm[2] = {0, 0};
+
+/* The three fans expose a tach feedback signal on dedicated GPIO inputs:
+ *   index 1 -> FAN_TOP_GD2 (PE1)
+ *   index 2 -> FAN_TOP_GD3 (PE14)
+ *   index 3 -> FAN_TOP_GD4 (PE15)
+ * The line is a ~50% duty square wave at 2 pulses per revolution; the
+ * useful information is the frequency, not the duty cycle. We count
+ * rising edges in a fixed sample window and convert to RPM.
+ *
+ * An unplugged fan sits high (board pull-up) with no edges, which
+ * naturally gives 0 RPM. */
+#define FAN_SAMPLE_MS        100U
+#define FAN_PULSES_PER_REV   2U
+
+static uint16_t fan_measure_rpm(uint8_t index)
+{
+    GPIO_TypeDef *port;
+    uint16_t pin;
+    switch(index) {
+        case 1: port = FAN_TOP_GD2_GPIO_Port; pin = FAN_TOP_GD2_Pin; break;
+        case 2: port = FAN_TOP_GD3_GPIO_Port; pin = FAN_TOP_GD3_Pin; break;
+        case 3: port = FAN_TOP_GD4_GPIO_Port; pin = FAN_TOP_GD4_Pin; break;
+        default: return 0;
+    }
+
+    uint32_t edges = 0;
+    GPIO_PinState prev = HAL_GPIO_ReadPin(port, pin);
+    uint32_t start = HAL_GetTick();
+    while ((HAL_GetTick() - start) < FAN_SAMPLE_MS) {
+        GPIO_PinState now = HAL_GPIO_ReadPin(port, pin);
+        if (now == GPIO_PIN_SET && prev == GPIO_PIN_RESET) {
+            edges++;
+        }
+        prev = now;
+    }
+
+    /* edges over FAN_SAMPLE_MS -> Hz = edges * (1000 / FAN_SAMPLE_MS)
+     * RPM = Hz * 60 / pulses_per_rev */
+    uint32_t rpm = (edges * (1000U / FAN_SAMPLE_MS) * 60U) / FAN_PULSES_PER_REV;
+    if (rpm > 0xFFFFU) rpm = 0xFFFFU;
+    return (uint16_t)rpm;
+}
 static uint32_t id_words[3] = {0};
 static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
@@ -120,14 +162,16 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CTRL_GET_FAN:
             uartResp->command = OW_CTRL_GET_FAN;
-            if(cmd->addr > 1){
+            if(cmd->addr < 1 || cmd->addr > 3){
                 uartResp->packet_type = OW_ERROR;
                 uartResp->data_len = 0;
                 uartResp->data = NULL;
             }else{
-                last_fan_speed = FAN_GetPWMDuty(&fan);
-                uartResp->data_len = 1;
-                uartResp->data = &last_fan_speed;
+                uint16_t rpm = fan_measure_rpm(cmd->addr);
+                last_fan_rpm[0] = (uint8_t)(rpm & 0xFF);
+                last_fan_rpm[1] = (uint8_t)((rpm >> 8) & 0xFF);
+                uartResp->data_len = 2;
+                uartResp->data = last_fan_rpm;
             }
             break;
         case OW_CTRL_I2C_RD:
