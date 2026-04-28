@@ -15,7 +15,7 @@
 
 
 // setup default
-Trigger_Config_t trigger_config = { 40, 1000, 250, 1000 };
+Trigger_Config_t trigger_config = { 40.0f, 1000, 250, 1000 };
 
 volatile uint8_t _usb_trigger_interlock = 0;
 volatile uint8_t _safety_trigger_interlock = 0;
@@ -57,8 +57,9 @@ static int jsonToTriggerConfigData(const char *jsonString, Trigger_Config_t* new
     }
 
     for (i = 1; i < r; i++) {
-        if (jsoneq(jsonString, &t[i], "TriggerFrequencyHz") == 0) {
-            newConfig->frequencyHz = strtoul(jsonString + t[i + 1].start, NULL, 10);
+        if (jsoneq(jsonString, &t[i], "TriggerFrequencyHz") == 0 ||
+            jsoneq(jsonString, &t[i], "frequencyHz") == 0) {
+            newConfig->frequencyHz = strtof(jsonString + t[i + 1].start, NULL);
             i++;
         } else if (jsoneq(jsonString, &t[i], "TriggerPulseWidthUsec") == 0) {
             newConfig->triggerPulseWidthUsec = strtoul(jsonString + t[i + 1].start, NULL, 10);
@@ -94,7 +95,7 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
     memset(jsonString, 0, max_length);
     snprintf(jsonString, max_length,
              "{"
-             "\"TriggerFrequencyHz\": %lu,"
+             "\"TriggerFrequencyHz\": %.2f,"
              "\"TriggerPulseWidthUsec\": %lu,"
              "\"LaserPulseDelayUsec\": %lu,"
              "\"LaserPulseWidthUsec\": %lu,"
@@ -104,7 +105,7 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
              "\"EnableTaTrigger\": %s,"
              "\"TriggerStatus\": %lu"
              "}",
-             trigger_config.frequencyHz,
+             (double)trigger_config.frequencyHz,
              trigger_config.triggerPulseWidthUsec,
              trigger_config.laserPulseDelayUsec,
              trigger_config.laserPulseWidthUsec,
@@ -122,7 +123,7 @@ static void updateTimerDataFromPeripheral()
 	 uint32_t timerClockFrequency = HAL_RCC_GetPCLK1Freq() / (preScaler + 1);
 	 uint32_t TIM_ARR = FSYNC_TIMER.Instance->ARR;
 	 uint32_t TIM_CCRx = HAL_TIM_ReadCapturedValue(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
-	 trigger_config.frequencyHz = timerClockFrequency / (TIM_ARR + 1);
+	 trigger_config.frequencyHz = (float)timerClockFrequency / (float)(TIM_ARR + 1);
 	 trigger_config.triggerPulseWidthUsec = ((TIM_CCRx * 100000) / timerClockFrequency) * 10; // Set the pulse width as needed
 
 	 uint32_t LASER_ARR = LASER_TIMER.Instance->ARR;
@@ -168,7 +169,7 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     }
 
     // Add range checks for the configuration parameters
-    if (config->frequencyHz == 0 || config->triggerPulseWidthUsec == 0 || config->frequencyHz > 100) {
+    if (config->frequencyHz < 1.0f || config->triggerPulseWidthUsec == 0 || config->frequencyHz > 100.0f) {
         return HAL_ERROR; // Invalid configuration values
     }
 
@@ -193,7 +194,7 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     FSYNC_TIMER.Instance->PSC = fsync_prescaler;
 
     // Calculate ARR and CCR1
-    uint32_t arr_ticks = (1000000UL / config->frequencyHz); // period in µs
+    uint32_t arr_ticks = (uint32_t)(1000000.0f / config->frequencyHz + 0.5f); // period in µs, rounded to nearest tick
     if (config->triggerPulseWidthUsec >= arr_ticks) {
         return HAL_ERROR; // Pulse width too long
     }
@@ -281,13 +282,15 @@ HAL_StatusTypeDef Trigger_SetConfigFromJSON(char *jsonString, size_t str_len)
 	uint8_t tempArr[255] = {0};
 	bool ret = HAL_OK;
 
-	Trigger_Config_t new_config;
-    new_config.LaserPulseSkipDelayUsec = 1800; //
+	// Seed from current config so any field absent from JSON keeps its current value
+	Trigger_Config_t new_config = trigger_config;
     // Copy the JSON string to tempArr
     memcpy((char *)tempArr, (char *)jsonString, str_len);
+    // printf("Trigger_SetConfigFromJSON: %s\r\n", (char *)tempArr);
 
 	if (jsonToTriggerConfigData((const char *)tempArr, &new_config) == 0)
 	{
+        Trigger_PrintConfig((const Trigger_Config_t*)&new_config);
 		Trigger_SetConfig(&new_config);
 		ret = HAL_OK;
 	}
@@ -314,6 +317,21 @@ uint32_t get_lsync_pulse_count(void)
 uint32_t get_fsync_pulse_count(void)
 {
 	return fsync_counter;
+}
+
+void Trigger_PrintConfig(const Trigger_Config_t *config)
+{
+    if (config == NULL) { return; }
+    printf("Trigger_Config_t:\r\n");
+    printf("  frequencyHz:           %.2f\r\n", (double)config->frequencyHz);
+    printf("  triggerPulseWidthUsec: %lu\r\n", config->triggerPulseWidthUsec);
+    printf("  laserPulseDelayUsec:   %lu\r\n", config->laserPulseDelayUsec);
+    printf("  laserPulseWidthUsec:   %lu\r\n", config->laserPulseWidthUsec);
+    printf("  LaserPulseSkipInterval:%lu\r\n", config->LaserPulseSkipInterval);
+    printf("  LaserPulseSkipDelayUs: %lu\r\n", config->LaserPulseSkipDelayUsec);
+    printf("  EnableSyncOut:         %s\r\n", config->EnableSyncOut  ? "true" : "false");
+    printf("  EnableTaTrigger:       %s\r\n", config->EnableTaTrigger? "true" : "false");
+    printf("  TriggerStatus:         %lu\r\n", config->TriggerStatus);
 }
 
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
