@@ -16,6 +16,54 @@
 static SystemOdometer_t system_odo;
 static LaserOdometer_t laser_odo;
 static bool odometer_initialized = false;
+static bool flash_sector_erased = false;
+
+/**
+ * @brief Erase the odometer flash sector (shared by both odometers)
+ * @retval HAL status
+ */
+static HAL_StatusTypeDef Odometer_Erase_Sector(void)
+{
+    HAL_StatusTypeDef status = Flash_Erase(ODOMETER_FLASH_BASE_ADDR, ODOMETER_FLASH_BASE_ADDR);
+    if (status == HAL_OK) {
+        flash_sector_erased = true;
+        printf("Odometer flash sector erased\r\n");
+    } else {
+        printf("Failed to erase odometer flash sector\r\n");
+    }
+    return status;
+}
+
+/**
+ * @brief Write both odometers to flash (called after sector erase)
+ * @retval HAL status
+ */
+static HAL_StatusTypeDef Odometer_Write_All_To_Flash(void)
+{
+    HAL_StatusTypeDef status;
+    uint8_t buffer[32];
+
+    /* Write system odometer */
+    memset(buffer, 0, sizeof(buffer));
+    memcpy(buffer, &system_odo, sizeof(SystemOdometer_t));
+    status = Flash_Write_Bytes(SYSTEM_ODO_FLASH_ADDR, buffer, sizeof(buffer));
+    if (status != HAL_OK) {
+        printf("Failed to write system odometer to flash\r\n");
+        return status;
+    }
+
+    /* Write laser odometer */
+    memset(buffer, 0, sizeof(buffer));
+    memcpy(buffer, &laser_odo, sizeof(LaserOdometer_t));
+    status = Flash_Write_Bytes(LASER_ODO_FLASH_ADDR, buffer, sizeof(buffer));
+    if (status != HAL_OK) {
+        printf("Failed to write laser odometer to flash\r\n");
+        return status;
+    }
+
+    flash_sector_erased = false;
+    return HAL_OK;
+}
 
 /**
  * @brief Initialize odometer module by reading from flash
@@ -98,21 +146,14 @@ HAL_StatusTypeDef Odometer_Update_System(void)
         /* Update last update tick */
         system_odo.last_update_tick = current_tick;
 
-        /* Write to flash */
-        uint8_t buffer[32];
-        memset(buffer, 0, sizeof(buffer));
-        memcpy(buffer, &system_odo, sizeof(SystemOdometer_t));
-
-        /* Erase flash sector before writing */
-        HAL_StatusTypeDef status = Flash_Erase(SYSTEM_ODO_FLASH_ADDR, SYSTEM_ODO_FLASH_ADDR);
+        /* Erase sector and write both odometers */
+        HAL_StatusTypeDef status = Odometer_Erase_Sector();
         if (status != HAL_OK) {
-            printf("Failed to erase system odometer flash\r\n");
             return status;
         }
 
-        status = Flash_Write_Bytes(SYSTEM_ODO_FLASH_ADDR, buffer, sizeof(buffer));
+        status = Odometer_Write_All_To_Flash();
         if (status != HAL_OK) {
-            printf("Failed to write system odometer to flash\r\n");
             return status;
         }
 
@@ -170,21 +211,14 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void)
     printf("Scan finished, pulses this scan: %lu, total: %lu\r\n",
            scan_pulses, laser_odo.total_pulses);
 
-    /* Write to flash */
-    uint8_t buffer[32];
-    memset(buffer, 0, sizeof(buffer));
-    memcpy(buffer, &laser_odo, sizeof(LaserOdometer_t));
-
-    /* Erase flash sector before writing */
-    HAL_StatusTypeDef status = Flash_Erase(LASER_ODO_FLASH_ADDR, LASER_ODO_FLASH_ADDR);
+    /* Erase sector and write both odometers */
+    HAL_StatusTypeDef status = Odometer_Erase_Sector();
     if (status != HAL_OK) {
-        printf("Failed to erase laser odometer flash\r\n");
         return status;
     }
 
-    status = Flash_Write_Bytes(LASER_ODO_FLASH_ADDR, buffer, sizeof(buffer));
+    status = Odometer_Write_All_To_Flash();
     if (status != HAL_OK) {
-        printf("Failed to write laser odometer to flash\r\n");
         return status;
     }
 
