@@ -118,20 +118,18 @@ static void trigger_GetConfigJSON(char *jsonString, size_t max_length)
 
 static void updateTimerDataFromPeripheral()
 {
-	 // Assuming you have the timer configuration and status
 	 uint32_t preScaler = FSYNC_TIMER.Instance->PSC;
 	 uint32_t timerClockFrequency = HAL_RCC_GetPCLK1Freq() / (preScaler + 1);
 	 uint32_t TIM_ARR = FSYNC_TIMER.Instance->ARR;
 	 uint32_t TIM_CCRx = HAL_TIM_ReadCapturedValue(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 	 trigger_config.frequencyHz = (float)timerClockFrequency / (float)(TIM_ARR + 1);
-	 trigger_config.triggerPulseWidthUsec = ((TIM_CCRx * 100000) / timerClockFrequency) * 10; // Set the pulse width as needed
+	 trigger_config.triggerPulseWidthUsec = ((TIM_CCRx * 100000) / timerClockFrequency) * 10;
 
-	 uint32_t LASER_ARR = LASER_TIMER.Instance->ARR;
-	 uint32_t LASER_CCRx = HAL_TIM_ReadCapturedValue(&LASER_TIMER, FSYNC_TIMER_CHAN);
-	 trigger_config.laserPulseDelayUsec = LASER_CCRx;
-	 trigger_config.laserPulseWidthUsec = LASER_ARR - LASER_CCRx + 1; // Set the pulse width as needed
+	 // LASER_TIMER ARR/CCR1 alternate between short_lsync and long_lsync slots,
+	 // both of which are composites of laserPulseDelayUsec + LaserPulseSkipDelayUsec.
+	 // They can't be unambiguously reversed into the source fields, so trust the
+	 // in-RAM values that Trigger_SetConfig already stored.
 
-	 // Check the timer status to determine if it's running
 	 trigger_config.TriggerStatus = TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 }
 
