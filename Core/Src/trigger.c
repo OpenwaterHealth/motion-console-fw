@@ -57,8 +57,7 @@ static int jsonToTriggerConfigData(const char *jsonString, Trigger_Config_t* new
     }
 
     for (i = 1; i < r; i++) {
-        if (jsoneq(jsonString, &t[i], "TriggerFrequencyHz") == 0 ||
-            jsoneq(jsonString, &t[i], "frequencyHz") == 0) {
+        if (jsoneq(jsonString, &t[i], "TriggerFrequencyHz") == 0) {
             newConfig->frequencyHz = strtof(jsonString + t[i + 1].start, NULL);
             i++;
         } else if (jsoneq(jsonString, &t[i], "TriggerPulseWidthUsec") == 0) {
