@@ -18,7 +18,7 @@
 #define NUM_DARK_FRAMES_AT_START 10
 
 typedef struct {
-    uint32_t frequencyHz;        // Trigger frequency in Hz 1 - 100
+    float    frequencyHz;        // Trigger frequency in Hz 1.00 - 100.00 (2-decimal precision)
     uint32_t triggerPulseWidthUsec;     // Pulse width in microseconds max determined by freq
     uint32_t laserPulseDelayUsec;     // Pulse width in microseconds max based on selected freq
     uint32_t laserPulseWidthUsec;     // Pulse width in microseconds max based on selected freq
@@ -39,6 +39,7 @@ uint32_t get_lsync_pulse_count(void);
 uint32_t get_fsync_pulse_count(void);
 void Trigger_Safety_Disconnect(void);
 void Trigger_Safety_Clear(void);
+void Trigger_PrintConfig(const Trigger_Config_t *config);
 
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);

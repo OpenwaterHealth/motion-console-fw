@@ -461,7 +461,7 @@ int main(void)
   
   // config trigger timers
   Trigger_Config_t triggerSetup;
-  triggerSetup.frequencyHz = 40;
+  triggerSetup.frequencyHz = 40.0f;
   triggerSetup.triggerPulseWidthUsec = 1000;
   triggerSetup.laserPulseDelayUsec = 250;
   triggerSetup.laserPulseWidthUsec = 1000;
