@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
+#include "usb_recovery.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -545,6 +546,8 @@ int main(void)
 
   // Init USB
   MX_USB_DEVICE_Init();
+  // Arm the EFT/EMC watchdog that recovers the OTG_FS link if it hangs.
+  usb_recovery_init();
   // Initialize message queue for system JSON messages
   printf("Initialize message queue\r\n");
   mq_init();
@@ -574,6 +577,7 @@ int main(void)
     /* USER CODE BEGIN 3 */
     comms_process();
     telemetry_poll();
+    usb_recovery_task();
     HAL_Delay(1);
   }
   /* USER CODE END 3 */
