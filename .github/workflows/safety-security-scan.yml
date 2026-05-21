@@ -28,6 +28,7 @@ jobs:
                    --error-exitcode=1 \
                    --force \
                    --inline-suppr \
+                   --std=c11 \
                    --template="[{severity}] {file}:{line} {id} - {message}" \
                    --suppress=missingIncludeSystem \
                    --suppress=*:Core/Src/lwrb.c \
