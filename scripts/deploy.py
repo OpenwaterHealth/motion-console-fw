@@ -81,66 +81,67 @@ def _build(config: str) -> None:
 
 
 def _enter_dfu_console(timeout: float) -> bool:
-    """Trigger the console into DFU using the same omotion API as
-    openmotion-sdk/scripts/soft_reset_console.py + scripts/enter_dfu.py."""
-    from omotion.Interface import MOTIONInterface
+    """Trigger the console into DFU using the current omotion API."""
+    from omotion import MotionInterface
 
-    interface, console_connected, _, _ = MOTIONInterface.acquire_motion_interface()
-    if not console_connected:
-        print("❌ Console not connected — cannot trigger DFU.")
-        if interface is not None:
-            interface.disconnect()
-        return False
-
-    # Stop telemetry poller before tearing down the serial port, mirroring
-    # soft_reset_console.py — avoids a cascade of ClearCommError logs.
+    interface = MotionInterface()
+    interface.start(wait=True, wait_timeout=timeout)
     try:
-        interface.console_module.telemetry.stop()
-    except Exception:
-        pass
+        if not interface.console.is_connected():
+            print("❌ Console not connected — cannot trigger DFU.")
+            return False
 
-    print("[*] Requesting DFU mode …")
-    try:
-        ok = interface.console_module.enter_dfu()
-    except Exception as exc:
-        print(f"❌ enter_dfu raised: {exc}")
-        ok = False
+        # Stop telemetry poller before tearing down the serial port.
+        # Mirrors the cleanup pattern from MotionConsole/soft_reset to
+        # avoid a cascade of ClearCommError logs.
+        try:
+            interface.console.telemetry.stop()
+        except Exception:
+            pass
+
+        print("[*] Requesting DFU mode …")
+        try:
+            return bool(interface.console.enter_dfu())
+        except Exception as exc:
+            print(f"❌ enter_dfu raised: {exc}")
+            return False
     finally:
-        interface.disconnect()
-    return bool(ok)
+        interface.stop()
 
 
 def _wait_for_console_comeback(timeout: float) -> bool:
-    """Poll the omotion interface until the console reports connected."""
-    from omotion.Interface import MOTIONInterface
+    """Construct the interface ONCE and poll the console handle."""
+    from omotion import MotionInterface
 
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        interface, console_connected, _, _ = MOTIONInterface.acquire_motion_interface()
-        if interface is not None:
-            interface.disconnect()
-        if console_connected:
-            return True
-        time.sleep(0.5)
-    return False
+    interface = MotionInterface()
+    interface.start(wait=False)
+    try:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if interface.console.is_connected():
+                return True
+            time.sleep(0.5)
+        return False
+    finally:
+        interface.stop()
 
 
 def _soft_reset_console() -> bool:
-    """Best-effort soft reset via omotion. Returns True if the call succeeded."""
-    from omotion.Interface import MOTIONInterface
+    """Best-effort soft reset via omotion."""
+    from omotion import MotionInterface
 
-    interface, console_connected, _, _ = MOTIONInterface.acquire_motion_interface()
+    interface = MotionInterface()
+    interface.start(wait=True, wait_timeout=5.0)
     try:
-        if not console_connected:
+        if not interface.console.is_connected():
             return False
         try:
-            interface.console_module.telemetry.stop()
+            interface.console.telemetry.stop()
         except Exception:
             pass
-        return bool(interface.console_module.soft_reset())
+        return bool(interface.console.soft_reset())
     finally:
-        if interface is not None:
-            interface.disconnect()
+        interface.stop()
 
 
 def main() -> int:
@@ -216,7 +217,7 @@ def main() -> int:
         print("⚠️  soft_reset did not bring the console back.")
 
     print("⚠️  Console did not re-enumerate. Please toggle power on the console.")
-    return 0
+    return 1
 
 
 if __name__ == "__main__":

@@ -35,6 +35,10 @@ def bin_path_for(repo_root: Path, config: str, project: str) -> Path:
 def resolve_dfu_util(override: str | None) -> str:
     """Return an absolute path to dfu-util, or raise if not found."""
     if override:
+        if not Path(override).is_file():
+            raise RuntimeError(
+                f"dfu-util override path does not exist: {override}"
+            )
         return override
     found = shutil.which("dfu-util")
     if not found:

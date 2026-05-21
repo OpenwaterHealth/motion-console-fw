@@ -50,6 +50,12 @@ def test_resolve_dfu_util_raises_when_missing(monkeypatch):
         resolve_dfu_util(None)
 
 
+def test_resolve_dfu_util_raises_when_override_does_not_exist(tmp_path: Path):
+    nonexistent = tmp_path / "does-not-exist" / "dfu-util"
+    with pytest.raises(RuntimeError, match="dfu-util override path"):
+        resolve_dfu_util(str(nonexistent))
+
+
 def _fake_run_returning(stdout: str, returncode: int = 0):
     def _run(cmd, **kw):
         return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
