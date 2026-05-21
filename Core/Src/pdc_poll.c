@@ -1,9 +1,9 @@
 /* Core/Src/pdc_poll.c */
+#include "stm32h7xx_hal.h"
 #include "pdc_poll.h"
 #include "pdc_buffer.h"
 #include "trigger.h"
 #include "tca9548a.h"
-#include "stm32h7xx_hal.h"
 #include <stdbool.h>
 #include <stdio.h>
 
