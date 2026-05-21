@@ -21,48 +21,29 @@ static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef *port, uint16_t pin)
 #include <stdint.h>
 #include <limits.h> // INT16_MIN
 
+/* Map DAC output range enum to nominal voltage limits. */
+static void range_to_limits(enum ad5761r_range ra, float *vmin, float *vmax)
+{
+	switch (ra)
+	{
+	case AD5761R_RANGE_M_10V_TO_P_10V: *vmin = -10.f; *vmax = +10.f; break;
+	case AD5761R_RANGE_0_V_TO_P_10V:   *vmin =   0.f; *vmax = +10.f; break;
+	case AD5761R_RANGE_M_5V_TO_P_5V:   *vmin =  -5.f; *vmax =  +5.f; break;
+	case AD5761R_RANGE_0V_TO_P_5V:     *vmin =   0.f; *vmax =  +5.f; break;
+	case AD5761R_RANGE_M_2V5_TO_P_7V5: *vmin = -2.5f; *vmax = +7.5f; break;
+	case AD5761R_RANGE_M_3V_TO_P_3V:   *vmin =  -3.f; *vmax =  +3.f; break;
+	case AD5761R_RANGE_0V_TO_P_16V:    *vmin =   0.f; *vmax = +16.f; break;
+	case AD5761R_RANGE_0V_TO_P_20V:    *vmin =   0.f; *vmax = +20.f; break;
+	default:                            *vmin =   0.f; *vmax =  +5.f; break;
+	}
+}
+
 // convert 16bit code to volts for chosen span
 float code_to_volts(const ad5761r_dev *dev, uint16_t code)
 {
 	// Base span from range
 	float vmin = 0.f, vmax = 5.f; // default
-	switch (dev->ra)
-	{
-	case AD5761R_RANGE_M_10V_TO_P_10V:
-		vmin = -10.f;
-		vmax = +10.f;
-		break;
-	case AD5761R_RANGE_0_V_TO_P_10V:
-		vmin = 0.f;
-		vmax = +10.f;
-		break;
-	case AD5761R_RANGE_M_5V_TO_P_5V:
-		vmin = -5.f;
-		vmax = +5.f;
-		break;
-	case AD5761R_RANGE_0V_TO_P_5V:
-		vmin = 0.f;
-		vmax = +5.f;
-		break;
-	case AD5761R_RANGE_M_2V5_TO_P_7V5:
-		vmin = -2.5f;
-		vmax = +7.5f;
-		break;
-	case AD5761R_RANGE_M_3V_TO_P_3V:
-		vmin = -3.f;
-		vmax = +3.f;
-		break;
-	case AD5761R_RANGE_0V_TO_P_16V:
-		vmin = 0.f;
-		vmax = +16.f;
-		break;
-	case AD5761R_RANGE_0V_TO_P_20V:
-		vmin = 0.f;
-		vmax = +20.f;
-		break;
-	default:
-		break;
-	}
+	range_to_limits(dev->ra, &vmin, &vmax);
 
 	// Apply optional 5% overrange (same as encoder)
 	if (dev->ovr_en)
@@ -116,41 +97,7 @@ uint16_t volts_to_code(const ad5761r_dev *dev, float v)
 {
 	// Compute nominal span and limits
 	float vmin = 0.f, vmax = 5.f; // default
-	switch (dev->ra)
-	{
-	case AD5761R_RANGE_M_10V_TO_P_10V:
-		vmin = -10.f;
-		vmax = +10.f;
-		break;
-	case AD5761R_RANGE_0_V_TO_P_10V:
-		vmin = 0.f;
-		vmax = +10.f;
-		break;
-	case AD5761R_RANGE_M_5V_TO_P_5V:
-		vmin = -5.f;
-		vmax = +5.f;
-		break;
-	case AD5761R_RANGE_0V_TO_P_5V:
-		vmin = 0.f;
-		vmax = +5.f;
-		break;
-	case AD5761R_RANGE_M_2V5_TO_P_7V5:
-		vmin = -2.5f;
-		vmax = +7.5f;
-		break;
-	case AD5761R_RANGE_M_3V_TO_P_3V:
-		vmin = -3.f;
-		vmax = +3.f;
-		break;
-	case AD5761R_RANGE_0V_TO_P_16V:
-		vmin = 0.f;
-		vmax = +16.f;
-		break;
-	case AD5761R_RANGE_0V_TO_P_20V:
-		vmin = 0.f;
-		vmax = +20.f;
-		break;
-	}
+	range_to_limits(dev->ra, &vmin, &vmax);
 
 	// Optional 5% overrange
 	if (dev->ovr_en)
