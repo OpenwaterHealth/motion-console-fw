@@ -46,6 +46,7 @@ def test_resolve_dfu_util_uses_override_when_given(tmp_path: Path):
 
 def test_resolve_dfu_util_raises_when_missing(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda _: None)
+    monkeypatch.setattr("_deploy_helpers._bundled_dfu_util", lambda: None)
     with pytest.raises(RuntimeError, match="dfu-util not found"):
         resolve_dfu_util(None)
 
@@ -54,6 +55,15 @@ def test_resolve_dfu_util_raises_when_override_does_not_exist(tmp_path: Path):
     nonexistent = tmp_path / "does-not-exist" / "dfu-util"
     with pytest.raises(RuntimeError, match="dfu-util override path"):
         resolve_dfu_util(str(nonexistent))
+
+
+def test_resolve_dfu_util_prefers_bundled_over_path(tmp_path: Path, monkeypatch):
+    bundled = tmp_path / "bundled" / "dfu-util.exe"
+    bundled.parent.mkdir(parents=True)
+    bundled.write_text("")
+    monkeypatch.setattr("_deploy_helpers._bundled_dfu_util", lambda: bundled)
+    monkeypatch.setattr(shutil, "which", lambda _: "C:/path/dfu-util.exe")
+    assert resolve_dfu_util(None) == str(bundled)
 
 
 def _fake_run_returning(stdout: str, returncode: int = 0):
