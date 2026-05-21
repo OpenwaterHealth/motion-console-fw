@@ -29,14 +29,14 @@ jobs:
                    --force \
                    --inline-suppr \
                    --suppress=missingIncludeSystem \
-                   ./Core/Src ./USB_DEVICE
+                   ./Core/Src ./USB_DEVICE/App
 
       # 2. Complexity Analysis (Lizard)
       # IEC 62304 recommends low cyclomatic complexity for testability.
       # Fails if any function exceeds a complexity of 15.
       - name: Check Code Complexity (IEC 62304 Requirement)
         run: |
-          lizard ./Core/Src ./USB_DEVICE -C 15 -L 100 -w
+          lizard ./Core/Src ./USB_DEVICE/App -C 15 -L 100 -w
 
       # 3. Vulnerability Scan against the committed SBOM
       # grype consumes the CycloneDX SBOM and checks each component against
