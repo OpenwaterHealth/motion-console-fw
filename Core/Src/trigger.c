@@ -30,7 +30,7 @@ uint32_t long_lsync_ccr1 = 0;
 
 bool fsync_disable_flag = false;
 
-static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
+static int jsoneq(const char *json, const jsmntok_t *tok, const char *s) {
   if (tok->type == JSMN_STRING && (int)strlen(s) == tok->end - tok->start &&
       strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
     return 0;
@@ -274,7 +274,7 @@ HAL_StatusTypeDef Trigger_Stop() {
 }
 
 
-HAL_StatusTypeDef Trigger_SetConfigFromJSON(char *jsonString, size_t str_len)
+HAL_StatusTypeDef Trigger_SetConfigFromJSON(const char *jsonString, size_t str_len)
 {
 	uint8_t tempArr[255] = {0};
 	bool ret = HAL_OK;
@@ -282,7 +282,7 @@ HAL_StatusTypeDef Trigger_SetConfigFromJSON(char *jsonString, size_t str_len)
 	// Seed from current config so any field absent from JSON keeps its current value
 	Trigger_Config_t new_config = trigger_config;
     // Copy the JSON string to tempArr
-    memcpy((char *)tempArr, (char *)jsonString, str_len);
+    memcpy((char *)tempArr, jsonString, str_len);
     // printf("Trigger_SetConfigFromJSON: %s\r\n", (char *)tempArr);
 
 	if (jsonToTriggerConfigData((const char *)tempArr, &new_config) == 0)

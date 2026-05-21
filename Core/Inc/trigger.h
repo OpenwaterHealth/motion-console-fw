@@ -33,7 +33,7 @@ void trigger_init(void);
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config);
 HAL_StatusTypeDef Trigger_Start() ;
 HAL_StatusTypeDef Trigger_Stop();
-HAL_StatusTypeDef Trigger_SetConfigFromJSON(char *jsonString, size_t str_len);
+HAL_StatusTypeDef Trigger_SetConfigFromJSON(const char *jsonString, size_t str_len);
 HAL_StatusTypeDef Trigger_GetConfigToJSON(char *jsonString, size_t max_length);
 uint32_t get_lsync_pulse_count(void);
 uint32_t get_fsync_pulse_count(void);

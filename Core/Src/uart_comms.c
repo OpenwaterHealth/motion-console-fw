@@ -274,7 +274,6 @@ void telemetry_poll(void)
 
 	TelemetrySample sample = {0};
 	sample.timestamp_ms = now;
-	sample.tec_status = true;
 
 	/* --- begin timed acquisition --- */
 	uint32_t dwt_start = DWT->CYCCNT;
@@ -325,10 +324,8 @@ void telemetry_poll(void)
 		if(_trip_counter > 200 && _trip_set){
 			Trigger_Safety_Clear();
 			_trip_set = false;
-			sample.tec_status = true;
-		}else{
-			sample.tec_status = true;
 		}
+		sample.tec_status = true;
 	}
 
 	/* --- end timed acquisition --- */

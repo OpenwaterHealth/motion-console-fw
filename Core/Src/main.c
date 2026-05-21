@@ -117,6 +117,7 @@ double EE_GAIN_VALUE = 0.0;
 uint16_t EE_THRESH_VALUE = 0;
 
 ad5761r_dev tec_dac;
+
 volatile bool _enter_dfu = false;
 
 

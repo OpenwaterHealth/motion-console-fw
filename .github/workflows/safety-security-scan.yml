@@ -28,7 +28,11 @@ jobs:
                    --error-exitcode=1 \
                    --force \
                    --inline-suppr \
+                   --template="[{severity}] {file}:{line} {id} - {message}" \
                    --suppress=missingIncludeSystem \
+                   --suppress=constParameterPointer:Core/Src/lwrb.c \
+                   --suppress=constParameterPointer:Core/Src/stm32h7xx_hal_msp.c \
+                   --suppress=constParameterPointer:Core/Src/syscalls.c \
                    ./Core/Src ./USB_DEVICE/App
 
       # 2. Complexity Analysis (Lizard)

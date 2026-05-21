@@ -123,7 +123,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 		for (j = 0; j < numPgs; ++j)
 		{
 #ifdef DEBUG_ECA
-			printf("Cfg page: %d\r\n", j+1);
+			printf("Cfg page: %u\r\n", j + 1);
 #endif
 			status = XO2ECAcmd_CfgWritePage(pXO2dev, p);
 
@@ -151,7 +151,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 			for (i = 0; i < numPgs; i++)
 			{
 #ifdef DEBUG_ECA
-				printf("Verify CfgPage: %d\r\n", i + 1);
+				printf("Verify CfgPage: %u\r\n", i + 1);
 #endif
 							
 				// Read back the programmed page
@@ -159,7 +159,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (status != OK)
 				{
 #ifdef DEBUG_ECA
-					printf("CfgReadPage(%d) ERR\r\n", i + 1);
+					printf("CfgReadPage(%u) ERR\r\n", i + 1);
 #endif
 					ret = -14;
 					goto PROG_ABORT;
@@ -170,7 +170,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 					if (buf[j] != p[j])
 					{
 #ifdef DEBUG_ECA
-						printf("Verify CfgPage(%d) ERR\r\n", i + 1);
+						printf("Verify CfgPage(%u) ERR\r\n", i + 1);
 #endif
 						ret = -15;
 						goto PROG_ABORT;
@@ -208,7 +208,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 		for (j = 0; j < numPgs; ++j)
 		{
 #ifdef DEBUG_ECA
-			printf("UFM page: %d\r\n", j+1);
+			printf("UFM page: %u\r\n", j + 1);
 #endif
 			status = XO2ECAcmd_UFMWritePage(pXO2dev, p);
 			if (status != OK)
@@ -237,7 +237,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 			for (i = 0; i < numPgs; i++)
 			{
 #ifdef DEBUG_ECA
-				printf("Verify UFMPage: %d\r\n", i + 1);
+				printf("Verify UFMPage: %u\r\n", i + 1);
 #endif
 				
 				// Readback the programmed page
@@ -245,7 +245,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (status != OK)
 				{
 #ifdef DEBUG_ECA
-					printf("UFMReadPage(%d) ERR\r\n", i + 1);
+					printf("UFMReadPage(%u) ERR\r\n", i + 1);
 #endif
 					ret = -24;
 					goto PROG_ABORT;
@@ -256,7 +256,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 					if (buf[j] != p[j])
 					{
 #ifdef DEBUG_ECA
-						printf("Verify UFMPage(%d) ERR\r\n", i + 1);
+						printf("Verify UFMPage(%u) ERR\r\n", i + 1);
 #endif
 						ret = -25;
 						goto PROG_ABORT;
@@ -309,7 +309,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (featRow.feature[i] != pProgJED->pFeatureRow->feature[i])
 				{
 #ifdef DEBUG_ECA
-					printf("FeatureRow Verify ERR @ feature[%d]\r\n", i);
+					printf("FeatureRow Verify ERR @ feature[%u]\r\n", i);
 #endif
 					ret = -32;
 					goto PROG_ABORT;
@@ -320,7 +320,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (featRow.feabits[i] != pProgJED->pFeatureRow->feabits[i])
 				{
 #ifdef DEBUG_ECA
-					printf("FeatureRow Verify ERR @ feabits[%d]\r\n", i);
+					printf("FeatureRow Verify ERR @ feabits[%u]\r\n", i);
 #endif
 					ret = -33;
 					goto PROG_ABORT;

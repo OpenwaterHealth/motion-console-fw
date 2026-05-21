@@ -87,10 +87,7 @@ float MAX31875_Get_Temp(MAX31875_Init_t *tempInitDef)
 	{
 		tempData = -tempData;												// if MSB = 1 -> data is negative
 	}
-	else {
-		tempData = tempData;												// if MSB = 0 -> data is positive
-	}
-
+	
 	return tempData;
 }
 
