@@ -23,6 +23,13 @@ volatile uint8_t _safety_trigger_interlock = 0;
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
 
+static volatile bool s_current_slot_is_dark = false;
+
+/* Set by LSYNC_PeriodElapsedCallback; consumed by pdc_poll_tick() from main loop. */
+static volatile bool     s_pdc_sample_pending = false;
+static volatile bool     s_pdc_sample_dark    = false;
+static volatile uint32_t s_pdc_sample_frame   = 0;
+
 uint32_t short_lsync_arr = 0;
 uint32_t long_lsync_arr = 0;
 uint32_t short_lsync_ccr1 = 0;
@@ -246,8 +253,12 @@ HAL_StatusTypeDef Trigger_Start() {
 
 	lsync_counter = 1;
 	fsync_counter = 1;
+	s_current_slot_is_dark = false;
+	s_pdc_sample_pending = false;
 
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
+	__HAL_TIM_CLEAR_FLAG(&LASER_TIMER, TIM_FLAG_UPDATE);
+	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
 	if(HAL_TIM_OC_Start_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
         return HAL_ERROR; // Handle error
 	}
@@ -266,6 +277,7 @@ HAL_StatusTypeDef Trigger_Stop() {
     }
 
     __HAL_TIM_DISABLE(&LASER_TIMER);
+    __HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
 
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
@@ -344,16 +356,16 @@ void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     fsync_counter++;
     if (trigger_config.LaserPulseSkipInterval > 0) {
-
-		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0 || (fsync_counter < NUM_DARK_FRAMES_AT_START )) {
-            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
-            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
-            // printf("Long LSYNC\r\n");
+        bool dark = ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0)
+                    || (fsync_counter < NUM_DARK_FRAMES_AT_START);
+        if (dark) {
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr);
+            __HAL_TIM_SET_COMPARE  (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
         } else {
-            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
-            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
-            // printf("Short LSYNC\r\n");
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr);
+            __HAL_TIM_SET_COMPARE  (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
         }
+        s_current_slot_is_dark = dark;
     }
 }
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
@@ -366,4 +378,28 @@ void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
     }
 #endif
 
+}
+
+void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    /* Fires on laser-pulse falling edge.  Snapshot lsync_counter + slot bit
+     * for pdc_poll to consume from the main loop. */
+    s_pdc_sample_frame  = lsync_counter;
+    s_pdc_sample_dark   = s_current_slot_is_dark;
+    s_pdc_sample_pending = true;
+}
+
+bool get_current_slot_is_dark(void) { return s_current_slot_is_dark; }
+
+bool consume_pdc_sample_pending(bool *out_dark_slot, uint32_t *out_frame_idx)
+{
+    __disable_irq();
+    bool pending = s_pdc_sample_pending;
+    if (pending) {
+        *out_dark_slot = s_pdc_sample_dark;
+        *out_frame_idx = s_pdc_sample_frame;
+        s_pdc_sample_pending = false;
+    }
+    __enable_irq();
+    return pending;
 }
