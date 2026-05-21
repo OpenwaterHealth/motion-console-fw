@@ -1,6 +1,8 @@
 import shutil
+import subprocess
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -8,6 +10,7 @@ from _deploy_helpers import (
     read_project_name,
     bin_path_for,
     resolve_dfu_util,
+    wait_for_dfu_device,
 )
 
 
@@ -45,3 +48,21 @@ def test_resolve_dfu_util_raises_when_missing(monkeypatch):
     monkeypatch.setattr(shutil, "which", lambda _: None)
     with pytest.raises(RuntimeError, match="dfu-util not found"):
         resolve_dfu_util(None)
+
+
+def _fake_run_returning(stdout: str, returncode: int = 0):
+    def _run(cmd, **kw):
+        return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+    return _run
+
+
+def test_wait_for_dfu_device_succeeds_when_listed():
+    with patch("_deploy_helpers.subprocess.run",
+               side_effect=_fake_run_returning("Found DFU: [0483:df11] ...\n")):
+        assert wait_for_dfu_device("dfu-util", timeout=0.5, poll_interval=0.05) is True
+
+
+def test_wait_for_dfu_device_times_out_when_absent():
+    with patch("_deploy_helpers.subprocess.run",
+               side_effect=_fake_run_returning("No DFU capable USB device available\n")):
+        assert wait_for_dfu_device("dfu-util", timeout=0.2, poll_interval=0.05) is False
