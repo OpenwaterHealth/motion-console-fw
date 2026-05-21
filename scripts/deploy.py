@@ -144,7 +144,20 @@ def _soft_reset_console() -> bool:
         interface.stop()
 
 
+def _force_utf8_stdout() -> None:
+    """Windows default cp1252 stdout chokes on the emoji glyphs printed
+    below. Reconfigure to UTF-8 with replace-on-error so a missing-glyph
+    terminal degrades gracefully instead of crashing the script."""
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            try:
+                stream.reconfigure(encoding="utf-8", errors="replace")
+            except Exception:
+                pass
+
+
 def main() -> int:
+    _force_utf8_stdout()
     args = parse_args()
 
     # Resolve everything that can fail without touching the device.
