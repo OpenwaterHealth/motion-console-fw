@@ -3,15 +3,19 @@
 #include <stdio.h>
 
 // ---- Internal helpers ----
-static inline void cs_low(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_RESET); }
-static inline void cs_high(const ad5761r_dev *d){ HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_SET); }
+static inline void cs_low(const ad5761r_dev *d) { HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_RESET); }
+static inline void cs_high(const ad5761r_dev *d) { HAL_GPIO_WritePin(d->cs_port, d->cs_pin, GPIO_PIN_SET); }
 
-static inline void drv_gpio_write(GPIO_TypeDef* port, uint16_t pin, GPIO_PinState st) {
-    if (port) HAL_GPIO_WritePin(port, pin, st);
+static inline void drv_gpio_write(GPIO_TypeDef *port, uint16_t pin, GPIO_PinState st)
+{
+	if (port)
+		HAL_GPIO_WritePin(port, pin, st);
 }
-static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef* port, uint16_t pin) {
-    if (port) return HAL_GPIO_ReadPin(port, pin);
-    return 0;
+static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef *port, uint16_t pin)
+{
+	if (port)
+		return HAL_GPIO_ReadPin(port, pin);
+	return 0;
 }
 
 #include <stdint.h>
@@ -20,127 +24,196 @@ static inline GPIO_PinState drv_gpio_read(GPIO_TypeDef* port, uint16_t pin) {
 // convert 16bit code to volts for chosen span
 float code_to_volts(const ad5761r_dev *dev, uint16_t code)
 {
-  // Base span from range
-  float vmin = 0.f, vmax = 5.f; // default
-  switch (dev->ra) {
-    case AD5761R_RANGE_M_10V_TO_P_10V: vmin = -10.f; vmax = +10.f; break;
-    case AD5761R_RANGE_0_V_TO_P_10V:   vmin =   0.f; vmax = +10.f; break;
-    case AD5761R_RANGE_M_5V_TO_P_5V:   vmin =  -5.f; vmax =  +5.f; break;
-    case AD5761R_RANGE_0V_TO_P_5V:     vmin =   0.f; vmax =  +5.f; break;
-    case AD5761R_RANGE_M_2V5_TO_P_7V5: vmin = -2.5f; vmax = +7.5f; break;
-    case AD5761R_RANGE_M_3V_TO_P_3V:   vmin =  -3.f; vmax =  +3.f; break;
-    case AD5761R_RANGE_0V_TO_P_16V:    vmin =   0.f; vmax = +16.f; break;
-    case AD5761R_RANGE_0V_TO_P_20V:    vmin =   0.f; vmax = +20.f; break;
-    default: break;
-  }
+	// Base span from range
+	float vmin = 0.f, vmax = 5.f; // default
+	switch (dev->ra)
+	{
+	case AD5761R_RANGE_M_10V_TO_P_10V:
+		vmin = -10.f;
+		vmax = +10.f;
+		break;
+	case AD5761R_RANGE_0_V_TO_P_10V:
+		vmin = 0.f;
+		vmax = +10.f;
+		break;
+	case AD5761R_RANGE_M_5V_TO_P_5V:
+		vmin = -5.f;
+		vmax = +5.f;
+		break;
+	case AD5761R_RANGE_0V_TO_P_5V:
+		vmin = 0.f;
+		vmax = +5.f;
+		break;
+	case AD5761R_RANGE_M_2V5_TO_P_7V5:
+		vmin = -2.5f;
+		vmax = +7.5f;
+		break;
+	case AD5761R_RANGE_M_3V_TO_P_3V:
+		vmin = -3.f;
+		vmax = +3.f;
+		break;
+	case AD5761R_RANGE_0V_TO_P_16V:
+		vmin = 0.f;
+		vmax = +16.f;
+		break;
+	case AD5761R_RANGE_0V_TO_P_20V:
+		vmin = 0.f;
+		vmax = +20.f;
+		break;
+	default:
+		break;
+	}
 
-  // Apply optional 5% overrange (same as encoder)
-  if (dev->ovr_en) {
-    float span = (vmax - vmin);
-    vmin -= 0.05f * span * 0.5f;
-    vmax += 0.05f * span * 0.5f;
-  }
+	// Apply optional 5% overrange (same as encoder)
+	if (dev->ovr_en)
+	{
+		float span = (vmax - vmin);
+		vmin -= 0.05f * span * 0.5f;
+		vmax += 0.05f * span * 0.5f;
+	}
 
-  const float span = (vmax - vmin);
+	const float span = (vmax - vmin);
 
-  // Unipolar or bipolar straight/offset-binary
-  if (vmin >= 0.f || !dev->b2c_range_en) {
-    // Straight/offset binary (both use same linear map)
-    // code 0..65535 -> v in [vmin, vmax]
-    float v = vmin + ( (float)code * (span / 65535.0f) );
-    // Clamp to nominal range just in case
-    if (v < vmin) v = vmin;
-    if (v > vmax) v = vmax;
-    return v;
-  } else {
-    // Bipolar two's complement (B2C)
-    // reinterpret as signed and scale: ±FS -> ±32767
-    int16_t s = (int16_t)code;
-    if (s == INT16_MIN) {
-      // Map exactly to negative full-scale endpoint
-      return vmin;
-    }
-    float v = ((float)s) * ((span / 2.0f) / 32767.0f);
-    // v currently in [-(span/2), +(span/2)] relative to 0 V
-    // Shift to absolute by noting midpoint is 0 V
-    // Since vmin = -span/2 and vmax = +span/2 in bipolar ranges:
-    // final volts = v
-    // But for consistency with vmin/vmax variables, just clamp:
-    if (v < vmin) v = vmin;
-    if (v > vmax) v = vmax;
-    return v;
-  }
+	// Unipolar or bipolar straight/offset-binary
+	if (vmin >= 0.f || !dev->b2c_range_en)
+	{
+		// Straight/offset binary (both use same linear map)
+		// code 0..65535 -> v in [vmin, vmax]
+		float v = vmin + ((float)code * (span / 65535.0f));
+		// Clamp to nominal range just in case
+		if (v < vmin)
+			v = vmin;
+		if (v > vmax)
+			v = vmax;
+		return v;
+	}
+	else
+	{
+		// Bipolar two's complement (B2C)
+		// reinterpret as signed and scale: ±FS -> ±32767
+		int16_t s = (int16_t)code;
+		if (s == INT16_MIN)
+		{
+			// Map exactly to negative full-scale endpoint
+			return vmin;
+		}
+		float v = ((float)s) * ((span / 2.0f) / 32767.0f);
+		// v currently in [-(span/2), +(span/2)] relative to 0 V
+		// Shift to absolute by noting midpoint is 0 V
+		// Since vmin = -span/2 and vmax = +span/2 in bipolar ranges:
+		// final volts = v
+		// But for consistency with vmin/vmax variables, just clamp:
+		if (v < vmin)
+			v = vmin;
+		if (v > vmax)
+			v = vmax;
+		return v;
+	}
 }
 
 // Convert volts to 16-bit code for chosen span; clamps to range
 uint16_t volts_to_code(const ad5761r_dev *dev, float v)
 {
-  // Compute nominal span and limits
-  float vmin=0.f, vmax=5.f; // default
-  switch (dev->ra) {
-    case AD5761R_RANGE_M_10V_TO_P_10V: vmin=-10.f; vmax=+10.f; break;
-    case AD5761R_RANGE_0_V_TO_P_10V: vmin=0.f;   vmax=+10.f; break;
-    case AD5761R_RANGE_M_5V_TO_P_5V:  vmin=-5.f;  vmax=+5.f;  break;
-    case AD5761R_RANGE_0V_TO_P_5V:  vmin=0.f;   vmax=+5.f;  break;
-    case AD5761R_RANGE_M_2V5_TO_P_7V5: vmin=-2.5f; vmax=+7.5f; break;
-    case AD5761R_RANGE_M_3V_TO_P_3V:  vmin=-3.f;  vmax=+3.f;  break;
-    case AD5761R_RANGE_0V_TO_P_16V: vmin=0.f;   vmax=+16.f; break;
-    case AD5761R_RANGE_0V_TO_P_20V: vmin=0.f;   vmax=+20.f; break;
-  }
+	// Compute nominal span and limits
+	float vmin = 0.f, vmax = 5.f; // default
+	switch (dev->ra)
+	{
+	case AD5761R_RANGE_M_10V_TO_P_10V:
+		vmin = -10.f;
+		vmax = +10.f;
+		break;
+	case AD5761R_RANGE_0_V_TO_P_10V:
+		vmin = 0.f;
+		vmax = +10.f;
+		break;
+	case AD5761R_RANGE_M_5V_TO_P_5V:
+		vmin = -5.f;
+		vmax = +5.f;
+		break;
+	case AD5761R_RANGE_0V_TO_P_5V:
+		vmin = 0.f;
+		vmax = +5.f;
+		break;
+	case AD5761R_RANGE_M_2V5_TO_P_7V5:
+		vmin = -2.5f;
+		vmax = +7.5f;
+		break;
+	case AD5761R_RANGE_M_3V_TO_P_3V:
+		vmin = -3.f;
+		vmax = +3.f;
+		break;
+	case AD5761R_RANGE_0V_TO_P_16V:
+		vmin = 0.f;
+		vmax = +16.f;
+		break;
+	case AD5761R_RANGE_0V_TO_P_20V:
+		vmin = 0.f;
+		vmax = +20.f;
+		break;
+	}
 
-  // Optional 5% overrange
-  if (dev->ovr_en) {
-    float span = (vmax - vmin);
-    vmin -= 0.05f * span * 0.5f;   // extend both ends equally
-    vmax += 0.05f * span * 0.5f;
-  }
+	// Optional 5% overrange
+	if (dev->ovr_en)
+	{
+		float span = (vmax - vmin);
+		vmin -= 0.05f * span * 0.5f; // extend both ends equally
+		vmax += 0.05f * span * 0.5f;
+	}
 
-  if (v < vmin) v = vmin;
-  if (v > vmax) v = vmax;
+	if (v < vmin)
+		v = vmin;
+	if (v > vmax)
+		v = vmax;
 
-  // Coding:
-  // Unipolar (0..Vmax): straight binary 0..65535
-  // Bipolar: use two’s complement if B2C=1 (recommended)
-  if (vmin >= 0.f) {
-    float code = (v - vmin) * (65535.0f / (vmax - vmin));
-    if (code < 0.f)
-    {
-    	code = 0.f;
-	  }
-	  else if (code > 65535.f)
-	  {
-	    code = 65535.f;
-    }
-    return (uint16_t)(code + 0.5f);
-  } else {
-    float span = vmax - vmin; // e.g., 20 V for ±10V
-    if (dev->b2c_range_en) {
-      // map v in [vmin,vmax] -> int16_t range −32768..+32767
-      float sc = v * (32767.0f / (span / 2.0f)); // ±full-scale -> ±32767
-      int32_t s = (int32_t)(sc + (sc >= 0 ? 0.5f : -0.5f));
-      if (s < -32768)
-      {
-    	  s = -32768;
-    	  if (s > 32767)
-    	  {
-    		  s = 32767;
-    	  }
-      }
-      return (uint16_t)((uint16_t)s); // reinterpret as 16-bit
-    } else {
-      // Bipolar straight binary: offset binary
-      float code = ( (v - vmin) * (65535.0f / span) );
-      if (code < 0.f)
-      {
-    	  code = 0.f;
-    	  if (code > 65535.f)
-    	  {
-    		  code = 65535.f;
-          }
-      }
-      return (uint16_t)(code + 0.5f);
-    }
-  }
+	// Coding:
+	// Unipolar (0..Vmax): straight binary 0..65535
+	// Bipolar: use two’s complement if B2C=1 (recommended)
+	if (vmin >= 0.f)
+	{
+		float code = (v - vmin) * (65535.0f / (vmax - vmin));
+		if (code < 0.f)
+		{
+			code = 0.f;
+		}
+		else if (code > 65535.f)
+		{
+			code = 65535.f;
+		}
+		return (uint16_t)(code + 0.5f);
+	}
+	else
+	{
+		float span = vmax - vmin; // e.g., 20 V for ±10V
+		if (dev->b2c_range_en)
+		{
+			// map v in [vmin,vmax] -> int16_t range −32768..+32767
+			float sc = v * (32767.0f / (span / 2.0f)); // ±full-scale -> ±32767
+			int32_t s = (int32_t)(sc + (sc >= 0 ? 0.5f : -0.5f));
+			if (s < -32768)
+			{
+				s = -32768;
+			}
+			else if (s > 32767)
+			{
+				s = 32767;
+			}
+			return (uint16_t)((uint16_t)s); // reinterpret as 16-bit
+		}
+		else
+		{
+			// Bipolar straight binary: offset binary
+			float code = ((v - vmin) * (65535.0f / span));
+			if (code < 0.f)
+			{
+				code = 0.f;
+				if (code > 65535.f)
+				{
+					code = 65535.f;
+				}
+			}
+			return (uint16_t)(code + 0.5f);
+		}
+	}
 }
 
 /**
@@ -162,8 +235,8 @@ uint16_t volts_to_code(const ad5761r_dev *dev, float v)
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
-		      uint8_t reg_addr_cmd,
-		      uint16_t reg_data)
+								uint8_t reg_addr_cmd,
+								uint16_t reg_data)
 {
 	HAL_StatusTypeDef ret = HAL_ERROR;
 	uint8_t data[3];
@@ -171,16 +244,18 @@ HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
 	data[0] = reg_addr_cmd;
 	data[1] = (reg_data & 0xFF00) >> 8;
 	data[2] = (reg_data & 0x00FF) >> 0;
-	//printf("Sending d[0] = 0x%02X, d[1] = 0x%02X,d[2] = 0x%02X\r\n", data[0], data[1], data[2]);
+	// printf("Sending d[0] = 0x%02X, d[1] = 0x%02X,d[2] = 0x%02X\r\n", data[0], data[1], data[2]);
 	cs_low(dev);
 	// ret = HAL_SPI_Transmit(dev->hspi, data, 3, HAL_MAX_DELAY);
 	ret = HAL_SPI_Transmit(dev->hspi, &data[0], 1, HAL_MAX_DELAY);
-	if (ret != HAL_OK) {
+	if (ret != HAL_OK)
+	{
 		cs_high(dev);
 		return ret;
 	}
 	ret = HAL_SPI_Transmit(dev->hspi, &data[1], 1, HAL_MAX_DELAY);
-	if (ret != HAL_OK) {
+	if (ret != HAL_OK)
+	{
 		cs_high(dev);
 		return ret;
 	}
@@ -209,8 +284,8 @@ HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_read(const ad5761r_dev *dev,
-		     uint8_t reg_addr_cmd,
-		     uint16_t *reg_data)
+							   uint8_t reg_addr_cmd,
+							   uint16_t *reg_data)
 {
 	HAL_StatusTypeDef ret = HAL_ERROR;
 	uint8_t data[3];
@@ -240,32 +315,36 @@ HAL_StatusTypeDef ad5761r_read(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_register_readback(ad5761r_dev *dev,
-				  enum ad5761r_reg reg_addr_cmd,
-				  uint16_t *reg_data)
+											enum ad5761r_reg reg_addr_cmd,
+											uint16_t *reg_data)
 {
-    HAL_StatusTypeDef ret;
-    uint8_t tx[3], rx[3];
+	HAL_StatusTypeDef ret;
+	uint8_t tx[3], rx[3];
 
-    // 1) Queue the read command (first frame) – result not valid yet
-    tx[0] = reg_addr_cmd;
-    tx[1] = 0;
-    tx[2] = 0;
+	// 1) Queue the read command (first frame) – result not valid yet
+	tx[0] = reg_addr_cmd;
+	tx[1] = 0;
+	tx[2] = 0;
 
-    //printf("Sending tx[2]= 0x%02X, tx[1]= 0x%02X, tx[0]= 0x%02X\r\n", tx[2],tx[1],tx[0]);
-    cs_low(dev);
-    ret = HAL_SPI_Transmit(dev->hspi, tx, 3, HAL_MAX_DELAY);
-    cs_high(dev);
-    if (ret != HAL_OK) return ret;
+	// printf("Sending tx[2]= 0x%02X, tx[1]= 0x%02X, tx[0]= 0x%02X\r\n", tx[2],tx[1],tx[0]);
+	cs_low(dev);
+	ret = HAL_SPI_Transmit(dev->hspi, tx, 3, HAL_MAX_DELAY);
+	cs_high(dev);
+	if (ret != HAL_OK)
+		return ret;
 
-    // 2) Clock out the result on the next frame (send NOP)
-    tx[0] = CMD_NOP; tx[1] = 0; tx[2] = 0;
-    cs_low(dev);
-    ret = HAL_SPI_Receive(dev->hspi, rx, 3, HAL_MAX_DELAY);
-    cs_high(dev);
-    if (ret != HAL_OK) return ret;
+	// 2) Clock out the result on the next frame (send NOP)
+	tx[0] = CMD_NOP;
+	tx[1] = 0;
+	tx[2] = 0;
+	cs_low(dev);
+	ret = HAL_SPI_Receive(dev->hspi, rx, 3, HAL_MAX_DELAY);
+	cs_high(dev);
+	if (ret != HAL_OK)
+		return ret;
 
-    *reg_data = (rx[1] << 8) | rx[2];
-    return HAL_OK;
+	*reg_data = (rx[1] << 8) | rx[2];
+	return HAL_OK;
 }
 
 /**
@@ -278,12 +357,12 @@ HAL_StatusTypeDef ad5761r_config(ad5761r_dev *dev)
 	uint16_t reg_data;
 
 	reg_data = AD5761R_CTRL_CV(dev->cv) |
-		   (dev->ovr_en ? AD5761R_CTRL_OVR : 0) |
-		   (dev->b2c_range_en ? AD5761R_CTRL_B2C : 0) |
-		   (dev->exc_temp_sd_en ? AD5761R_CTRL_ETS : 0) |
-		   (dev->int_ref_en ? AD5761R_CTRL_IRO : 0) |
-		   AD5761R_CTRL_PV(dev->pv) |
-		   AD5761R_CTRL_RA(dev->ra);
+			   (dev->ovr_en ? AD5761R_CTRL_OVR : 0) |
+			   (dev->b2c_range_en ? AD5761R_CTRL_B2C : 0) |
+			   (dev->exc_temp_sd_en ? AD5761R_CTRL_ETS : 0) |
+			   (dev->int_ref_en ? AD5761R_CTRL_IRO : 0) |
+			   AD5761R_CTRL_PV(dev->pv) |
+			   AD5761R_CTRL_RA(dev->ra);
 
 	printf("Config Data 0x%02X\r\n", reg_data);
 	return ad5761r_write(dev, CMD_WR_CTRL_REG, reg_data);
@@ -298,12 +377,12 @@ HAL_StatusTypeDef ad5761r_config(ad5761r_dev *dev)
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_daisy_chain_en_dis(ad5761r_dev *dev,
-				       bool en_dis)
+												 bool en_dis)
 {
 	dev->daisy_chain_en = en_dis;
 
 	return ad5761r_write(dev, CMD_DIS_DAISY_CHAIN,
-			     AD5761R_DIS_DAISY_CHAIN_DDC(!en_dis));
+						 AD5761R_DIS_DAISY_CHAIN_DDC(!en_dis));
 }
 
 /**
@@ -313,7 +392,7 @@ HAL_StatusTypeDef ad5761r_set_daisy_chain_en_dis(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(const ad5761r_dev *dev,
-				       bool *en_dis)
+												 bool *en_dis)
 {
 	*en_dis = dev->daisy_chain_en;
 
@@ -335,7 +414,7 @@ HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_output_range(ad5761r_dev *dev,
-				 enum ad5761r_range out_range)
+										   enum ad5761r_range out_range)
 {
 	dev->ra = out_range;
 
@@ -349,7 +428,7 @@ HAL_StatusTypeDef ad5761r_set_output_range(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_output_range(const ad5761r_dev *dev,
-				 enum ad5761r_range *out_range)
+										   enum ad5761r_range *out_range)
 {
 	*out_range = dev->ra;
 
@@ -366,7 +445,7 @@ HAL_StatusTypeDef ad5761r_get_output_range(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_power_up_voltage(ad5761r_dev *dev,
-				     enum ad5761r_scale pv)
+											   enum ad5761r_scale pv)
 {
 	dev->pv = pv;
 
@@ -380,7 +459,7 @@ HAL_StatusTypeDef ad5761r_set_power_up_voltage(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_power_up_voltage(const ad5761r_dev *dev,
-				     enum ad5761r_scale *pv)
+											   enum ad5761r_scale *pv)
 {
 	*pv = dev->pv;
 
@@ -397,7 +476,7 @@ HAL_StatusTypeDef ad5761r_get_power_up_voltage(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_clear_voltage(ad5761r_dev *dev,
-				  enum ad5761r_scale cv)
+											enum ad5761r_scale cv)
 {
 	dev->cv = cv;
 
@@ -411,7 +490,7 @@ HAL_StatusTypeDef ad5761r_set_clear_voltage(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_clear_voltage(const ad5761r_dev *dev,
-				  enum ad5761r_scale *cv)
+											enum ad5761r_scale *cv)
 {
 	*cv = dev->cv;
 
@@ -427,7 +506,7 @@ HAL_StatusTypeDef ad5761r_get_clear_voltage(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_internal_reference_en_dis(ad5761r_dev *dev,
-		bool en_dis)
+														bool en_dis)
 {
 	dev->int_ref_en = en_dis;
 
@@ -441,7 +520,7 @@ HAL_StatusTypeDef ad5761r_set_internal_reference_en_dis(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(const ad5761r_dev *dev,
-		bool *en_dis)
+														bool *en_dis)
 {
 	*en_dis = dev->int_ref_en;
 
@@ -457,7 +536,7 @@ HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
-		bool en_dis)
+														  bool en_dis)
 {
 	dev->exc_temp_sd_en = en_dis;
 
@@ -471,7 +550,7 @@ HAL_StatusTypeDef ad5761r_set_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(const ad5761r_dev *dev,
-		bool *en_dis)
+														  bool *en_dis)
 {
 	*en_dis = dev->exc_temp_sd_en;
 
@@ -488,7 +567,7 @@ HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(const ad5761r_dev *dev
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_2c_bipolar_range_en_dis(ad5761r_dev *dev,
-		bool en_dis)
+													  bool en_dis)
 {
 	dev->b2c_range_en = en_dis;
 
@@ -503,7 +582,7 @@ HAL_StatusTypeDef ad5761r_set_2c_bipolar_range_en_dis(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(const ad5761r_dev *dev,
-		bool *en_dis)
+													  bool *en_dis)
 {
 	*en_dis = dev->b2c_range_en;
 
@@ -519,7 +598,7 @@ HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_overrange_en_dis(ad5761r_dev *dev,
-				     bool en_dis)
+											   bool en_dis)
 {
 	dev->ovr_en = en_dis;
 
@@ -533,7 +612,7 @@ HAL_StatusTypeDef ad5761r_set_overrange_en_dis(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_overrange_en_dis(const ad5761r_dev *dev,
-				     bool *en_dis)
+											   bool *en_dis)
 {
 	*en_dis = dev->ovr_en;
 
@@ -549,7 +628,7 @@ HAL_StatusTypeDef ad5761r_get_overrange_en_dis(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_short_circuit_condition(const ad5761r_dev *dev,
-		bool *sc)
+													  bool *sc)
 {
 	uint16_t reg_data;
 	HAL_StatusTypeDef ret;
@@ -569,7 +648,7 @@ HAL_StatusTypeDef ad5761r_get_short_circuit_condition(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_brownout_condition(const ad5761r_dev *dev,
-				       bool *bo)
+												 bool *bo)
 {
 	uint16_t reg_data;
 	HAL_StatusTypeDef ret;
@@ -589,9 +668,10 @@ HAL_StatusTypeDef ad5761r_get_brownout_condition(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_reset_pin(ad5761r_dev *dev,
-		GPIO_PinState value)
+										GPIO_PinState value)
 {
-	if (dev->rst_port) {
+	if (dev->rst_port)
+	{
 		drv_gpio_write(dev->rst_port, dev->rst_pin, value);
 	}
 
@@ -605,9 +685,10 @@ HAL_StatusTypeDef ad5761r_set_reset_pin(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_reset_pin(const ad5761r_dev *dev,
-		GPIO_PinState *value)
+										GPIO_PinState *value)
 {
-	if (dev->rst_port) {
+	if (dev->rst_port)
+	{
 		*value = drv_gpio_read(dev->rst_port, dev->rst_pin);
 		return HAL_OK;
 	}
@@ -624,9 +705,10 @@ HAL_StatusTypeDef ad5761r_get_reset_pin(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_clr_pin(ad5761r_dev *dev,
-		GPIO_PinState value)
+									  GPIO_PinState value)
 {
-	if (dev->clr_port) {
+	if (dev->clr_port)
+	{
 		drv_gpio_write(dev->clr_port, dev->clr_pin, value);
 	}
 
@@ -640,9 +722,10 @@ HAL_StatusTypeDef ad5761r_set_clr_pin(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_clr_pin(const ad5761r_dev *dev,
-		GPIO_PinState *value)
+									  GPIO_PinState *value)
 {
-	if (dev->clr_port) {
+	if (dev->clr_port)
+	{
 		*value = drv_gpio_read(dev->clr_port, dev->clr_pin);
 		return HAL_OK;
 	}
@@ -659,9 +742,10 @@ HAL_StatusTypeDef ad5761r_get_clr_pin(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_set_ldac_pin(ad5761r_dev *dev,
-		GPIO_PinState value)
+									   GPIO_PinState value)
 {
-	if (dev->ldac_port) {
+	if (dev->ldac_port)
+	{
 		drv_gpio_write(dev->ldac_port, dev->ldac_pin, value);
 	}
 
@@ -675,9 +759,10 @@ HAL_StatusTypeDef ad5761r_set_ldac_pin(ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_get_ldac_pin(const ad5761r_dev *dev,
-		GPIO_PinState *value)
+									   GPIO_PinState *value)
 {
-	if (dev->ldac_port) {
+	if (dev->ldac_port)
+	{
 		*value = drv_gpio_read(dev->ldac_port, dev->ldac_pin);
 		return HAL_OK;
 	}
@@ -692,7 +777,7 @@ HAL_StatusTypeDef ad5761r_get_ldac_pin(const ad5761r_dev *dev,
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_write_input_register(ad5761r_dev *dev,
-				     uint16_t dac_data)
+											   uint16_t dac_data)
 {
 	uint16_t reg_data;
 
@@ -721,7 +806,7 @@ HAL_StatusTypeDef ad5761r_update_dac_register(ad5761r_dev *dev)
  * @return 0 in case of success, negative error code otherwise.
  */
 HAL_StatusTypeDef ad5761r_write_update_dac_register(ad5761r_dev *dev,
-		uint16_t dac_data)
+													uint16_t dac_data)
 {
 	uint16_t reg_data;
 
@@ -762,12 +847,12 @@ HAL_StatusTypeDef ad5761r_init(ad5761r_dev *dev)
 {
 	HAL_StatusTypeDef ret = HAL_ERROR;
 
-    if (!dev || !dev->hspi) return HAL_ERROR;
+	if (!dev || !dev->hspi)
+		return HAL_ERROR;
 
-    ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
+	ret = ad5761r_write(dev, CMD_SW_FULL_RESET, 0);
 	HAL_Delay(1);
 	ret |= ad5761r_config(dev);
 
 	return ret;
-
 }

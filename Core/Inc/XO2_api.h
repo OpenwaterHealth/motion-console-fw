@@ -31,9 +31,9 @@ int XO2ECA_apiClearXO2(XO2Handle_t *pXO2dev);
 
 int XO2ECA_apiEraseFlash(XO2Handle_t *pXO2dev,  int mode);
 
-void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED);
+void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED);
 
-int XO2ECA_apiJEDECverify(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED);
+int XO2ECA_apiJEDECverify(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED);
 
 
 int XO2ECA_apiReadBackCfg(XO2Handle_t *pXO2dev, unsigned char *pBuf);

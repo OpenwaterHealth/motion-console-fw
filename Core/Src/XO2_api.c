@@ -432,7 +432,7 @@ int XO2ECA_apiEraseFlash(XO2Handle_t *pXO2dev,  int mode)
  * Display info about JEDEC data structure.
  * @param pXO2dev reference to the XO2 device to access and program
  */
-void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED)
+void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED)
 {
 
 	printf("JEDEC Data Structure:\r\n");
@@ -452,7 +452,7 @@ void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED)
  *  @param pXO2dev reference to the XO2 device to access and program
  * @return OK if compatible.  ERROR if JEDEC file for different device, not compatible.
  */
-int XO2ECA_apiJEDECverify(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED)
+int XO2ECA_apiJEDECverify(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED)
 {
 
 
@@ -546,9 +546,9 @@ int XO2ECA_apiReadBackUFM(XO2Handle_t *pXO2dev, int startPg, int numPgs, unsigne
 		pBuf = pBuf + 16;  // point to next page of data
 	}
 	
-	status = XO2ECAcmd_closeCfgIF(pXO2dev); 
+	(void)XO2ECAcmd_closeCfgIF(pXO2dev); 
 
-	status = XO2ECAcmd_Bypass(pXO2dev); 
+	(void)XO2ECAcmd_Bypass(pXO2dev); 
 	
 	return(ret);
 
@@ -632,9 +632,9 @@ int XO2ECA_apiWriteUFM(XO2Handle_t *pXO2dev, int startPg, int numPgs, unsigned c
 		pBuf = pBuf + 16;  // point to next page of data
 	}
 	
-	status = XO2ECAcmd_closeCfgIF(pXO2dev); 
+	(void)XO2ECAcmd_closeCfgIF(pXO2dev); 
 
-	status = XO2ECAcmd_Bypass(pXO2dev); 
+	(void)XO2ECAcmd_Bypass(pXO2dev); 
 	
 	return(ret);
 }
@@ -698,13 +698,13 @@ int XO2ECA_apiGetHdwStatus(XO2Handle_t *pXO2dev, unsigned int *pVal)
 	{
 		printf("XO2 Status Register = %x\r\n", regVal);
 		*pVal = 0;
-		if (regVal & 0x00000100)
-			*pVal = *pVal | 1;
-		if (regVal & 0x00001000)
-			*pVal = *pVal | 2;
-		if (regVal & 0x00002000)
-			*pVal = *pVal | 4;
-		*pVal = *pVal | ((regVal>>19) & 0x70);
+		if (regVal & 0x00000100u)
+			*pVal |= 1u;
+		if (regVal & 0x00001000u)
+			*pVal |= 2u;
+		if (regVal & 0x00002000u)
+			*pVal |= 4u;
+		*pVal |= ((regVal >> 19) & 0x7U) << 4;
 	}
 	else
 	{
