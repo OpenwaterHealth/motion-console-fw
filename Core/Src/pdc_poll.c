@@ -12,7 +12,9 @@
 #define PDC_I2C_ADDR    0x41
 #define PDC_REG         0x1C
 #define PDC_BYTES       2
-#define PDC_SETTLE_MS   1   /* FPGA averaging window after laser pulse falls */
+#define PDC_SETTLE_MS   2   /* Wait from laser-pulse RISING edge: covers the
+                             * 500 us pulse width + ~hundreds-of-us FPGA
+                             * averaging window with margin. */
 
 static uint32_t s_pending_since_tick = 0;
 static bool     s_have_pending = false;

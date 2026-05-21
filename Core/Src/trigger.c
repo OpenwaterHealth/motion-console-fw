@@ -28,7 +28,7 @@ static volatile bool s_current_slot_is_dark = false;
 /* SPSC queue of pending PDC samples between the LSYNC ISR (producer) and the
  * main-loop pdc_poll_tick (consumer). Sized for ~200 ms of slack at 40 Hz so
  * brief main-loop stalls (USB bursts, comms handling) don't lose frames. */
-#define PDC_PENDING_CAPACITY 8
+#define PDC_PENDING_CAPACITY 32
 typedef struct {
     uint32_t frame_idx;
     bool     dark_slot;
@@ -382,22 +382,20 @@ void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 }
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
+    /* Fires on laser-pulse rising edge (CC1 compare match).  Increment the
+     * frame counter and enqueue (frame_idx, dark_slot) for pdc_poll_tick to
+     * consume from the main loop.  Drop-oldest on overflow so the freshest
+     * samples win; the overwrite count propagates to the ring buffer's drop
+     * counter via consume_pdc_pending_overwrites().
+     *
+     * We enqueue at the rising edge rather than the falling edge because
+     * STM32 TIM_UPDATE events get coalesced when interrupts are delayed —
+     * empirically that caused ~30% sample loss in bursts when other ISRs
+     * (USB, FSYNC) held the CPU. CC1 fires reliably for every frame because
+     * lsync_counter increments correctly under load. The post-pulse FPGA
+     * settle window is handled by pdc_poll_tick's PDC_SETTLE_MS delay. */
     lsync_counter++;
 
-#if 0
-    if (lsync_counter % 200 == 0) {
-    	printf("LSYNC tick: %lu\r\n", lsync_counter);
-    }
-#endif
-
-}
-
-void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
-{
-    /* Fires on laser-pulse falling edge.  Enqueue (frame_idx, dark_slot) for
-     * pdc_poll_tick to consume from the main loop.  Drop-oldest on overflow so
-     * the freshest samples win; the overwrite count propagates to the ring
-     * buffer's drop counter. */
     if (s_pending_count == PDC_PENDING_CAPACITY) {
         s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
         s_pending_count--;
@@ -407,6 +405,15 @@ void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     s_pending_buf[s_pending_head].dark_slot = s_current_slot_is_dark;
     s_pending_head = (uint16_t)((s_pending_head + 1) % PDC_PENDING_CAPACITY);
     s_pending_count++;
+}
+
+void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    /* No-op. PDC sample enqueue moved to LSYNC_DelayElapsedCallback (rising
+     * edge) to avoid TIM_UPDATE coalescing. Kept declared so the dispatch in
+     * main.c still compiles; the dispatch could be removed once we're sure
+     * the rising-edge approach is stable. */
+    (void)htim;
 }
 
 bool get_current_slot_is_dark(void) { return s_current_slot_is_dark; }
