@@ -66,3 +66,10 @@ def test_wait_for_dfu_device_times_out_when_absent():
     with patch("_deploy_helpers.subprocess.run",
                side_effect=_fake_run_returning("No DFU capable USB device available\n")):
         assert wait_for_dfu_device("dfu-util", timeout=0.2, poll_interval=0.05) is False
+
+
+def test_wait_for_dfu_device_returns_false_when_dfu_util_missing():
+    with patch("_deploy_helpers.subprocess.run",
+               side_effect=FileNotFoundError("dfu-util gone")):
+        assert wait_for_dfu_device("dfu-util", timeout=0.5,
+                                   poll_interval=0.05) is False
