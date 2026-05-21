@@ -106,10 +106,10 @@ uint16_t volts_to_code(const ad5761r_dev *dev, float v)
     if (code < 0.f)
     {
     	code = 0.f;
-    	if (code > 65535.f)
-    	{
-    		code = 65535.f;
-    	}
+	  }
+	  else if (code > 65535.f)
+	  {
+	    code = 65535.f;
     }
     return (uint16_t)(code + 0.5f);
   } else {
@@ -175,7 +175,15 @@ HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
 	cs_low(dev);
 	// ret = HAL_SPI_Transmit(dev->hspi, data, 3, HAL_MAX_DELAY);
 	ret = HAL_SPI_Transmit(dev->hspi, &data[0], 1, HAL_MAX_DELAY);
+	if (ret != HAL_OK) {
+		cs_high(dev);
+		return ret;
+	}
 	ret = HAL_SPI_Transmit(dev->hspi, &data[1], 1, HAL_MAX_DELAY);
+	if (ret != HAL_OK) {
+		cs_high(dev);
+		return ret;
+	}
 	ret = HAL_SPI_Transmit(dev->hspi, &data[2], 1, HAL_MAX_DELAY);
 	cs_high(dev);
 
@@ -200,7 +208,7 @@ HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
  * @param reg_data - The received data.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_read(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_read(const ad5761r_dev *dev,
 		     uint8_t reg_addr_cmd,
 		     uint16_t *reg_data)
 {
@@ -304,7 +312,7 @@ HAL_StatusTypeDef ad5761r_set_daisy_chain_en_dis(ad5761r_dev *dev,
  * @param en_dis - The status of the daisy-chain mode (enabled, disabled).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(const ad5761r_dev *dev,
 				       bool *en_dis)
 {
 	*en_dis = dev->daisy_chain_en;
@@ -340,7 +348,7 @@ HAL_StatusTypeDef ad5761r_set_output_range(ad5761r_dev *dev,
  * @param out_range - The output range values.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_output_range(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_output_range(const ad5761r_dev *dev,
 				 enum ad5761r_range *out_range)
 {
 	*out_range = dev->ra;
@@ -371,7 +379,7 @@ HAL_StatusTypeDef ad5761r_set_power_up_voltage(ad5761r_dev *dev,
  * @param pv - The power up voltage.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_power_up_voltage(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_power_up_voltage(const ad5761r_dev *dev,
 				     enum ad5761r_scale *pv)
 {
 	*pv = dev->pv;
@@ -402,7 +410,7 @@ HAL_StatusTypeDef ad5761r_set_clear_voltage(ad5761r_dev *dev,
  * @param cv - The clear voltage.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_clear_voltage(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_clear_voltage(const ad5761r_dev *dev,
 				  enum ad5761r_scale *cv)
 {
 	*cv = dev->cv;
@@ -432,7 +440,7 @@ HAL_StatusTypeDef ad5761r_set_internal_reference_en_dis(ad5761r_dev *dev,
  * @param en_dis - The status of the internal reference (enabled, disabled).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(const ad5761r_dev *dev,
 		bool *en_dis)
 {
 	*en_dis = dev->int_ref_en;
@@ -462,7 +470,7 @@ HAL_StatusTypeDef ad5761r_set_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
  * @param en_dis - The status of the ETS function (enabled, disabled).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(const ad5761r_dev *dev,
 		bool *en_dis)
 {
 	*en_dis = dev->exc_temp_sd_en;
@@ -494,7 +502,7 @@ HAL_StatusTypeDef ad5761r_set_2c_bipolar_range_en_dis(ad5761r_dev *dev,
  *		   (enabled, disabled).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(const ad5761r_dev *dev,
 		bool *en_dis)
 {
 	*en_dis = dev->b2c_range_en;
@@ -524,7 +532,7 @@ HAL_StatusTypeDef ad5761r_set_overrange_en_dis(ad5761r_dev *dev,
  * @param en_dis - The status of the twos 5% overrange (enabled, disabled).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_overrange_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_overrange_en_dis(const ad5761r_dev *dev,
 				     bool *en_dis)
 {
 	*en_dis = dev->ovr_en;
@@ -540,7 +548,7 @@ HAL_StatusTypeDef ad5761r_get_overrange_en_dis(ad5761r_dev *dev,
  *		   not detected).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_short_circuit_condition(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_short_circuit_condition(const ad5761r_dev *dev,
 		bool *sc)
 {
 	uint16_t reg_data;
@@ -560,7 +568,7 @@ HAL_StatusTypeDef ad5761r_get_short_circuit_condition(ad5761r_dev *dev,
  *		   not detected).
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_brownout_condition(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_brownout_condition(const ad5761r_dev *dev,
 				       bool *bo)
 {
 	uint16_t reg_data;
@@ -596,7 +604,7 @@ HAL_StatusTypeDef ad5761r_set_reset_pin(ad5761r_dev *dev,
  * @param value - The pin value.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_reset_pin(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_reset_pin(const ad5761r_dev *dev,
 		GPIO_PinState *value)
 {
 	if (dev->rst_port) {
@@ -631,7 +639,7 @@ HAL_StatusTypeDef ad5761r_set_clr_pin(ad5761r_dev *dev,
  * @param value - The pin value.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_clr_pin(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_clr_pin(const ad5761r_dev *dev,
 		GPIO_PinState *value)
 {
 	if (dev->clr_port) {
@@ -666,7 +674,7 @@ HAL_StatusTypeDef ad5761r_set_ldac_pin(ad5761r_dev *dev,
  * @param value - The pin value.
  * @return 0 in case of success, negative error code otherwise.
  */
-HAL_StatusTypeDef ad5761r_get_ldac_pin(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_ldac_pin(const ad5761r_dev *dev,
 		GPIO_PinState *value)
 {
 	if (dev->ldac_port) {
