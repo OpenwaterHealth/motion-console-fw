@@ -102,6 +102,7 @@ static uint16_t tecadc_last_raw[4];
 
 static char retTriggerJson[0xFF];
 static float tec_setpoint = 0.0;
+static float temp_val = 0;
 
 extern volatile bool _trip_set;
 extern volatile bool _tec_sample_lock;
@@ -301,7 +302,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
                 uint16_t reg_data = 0;
                 if(ad5761r_register_readback(&tec_dac, CMD_RD_DAC_REG, &reg_data) == HAL_OK)
                 {
-                    float temp_val = 0;
+                    temp_val = 0;
                     temp_val = code_to_volts(&tec_dac, reg_data);
                     uartResp->data = (uint8_t *)&temp_val;
                     uartResp->data_len   = sizeof(float);

@@ -16,7 +16,8 @@ jobs:
       - name: Install Analysis Tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y cppcheck lizard
+          sudo apt-get install -y cppcheck
+          pip3 install lizard
 
       # 1. Cppcheck with MISRA-C:2012 and Safety focus
       # --error-exitcode=1 ensures the build fails on findings
@@ -53,8 +54,8 @@ jobs:
       # 4. Upload SARIF results to GitHub Security tab
       # Makes vulnerability findings visible in the repository's Security view.
       - name: Upload SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+        if: always() && steps.grype.conclusion != 'skipped'
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: ${{ steps.grype.outputs.sarif }}
 
