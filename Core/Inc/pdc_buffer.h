@@ -22,4 +22,8 @@ size_t   pdc_buffer_drain(pdc_sample_t *out, size_t max_samples);
 uint16_t pdc_buffer_dropped_since_last_drain(void);
 size_t   pdc_buffer_count(void);
 
+/* Add external drops (e.g. producer-side ISR overflow) to the pending counter
+ * so they surface through the same drained-drop-count channel. */
+void     pdc_buffer_account_drops(uint16_t n);
+
 #endif

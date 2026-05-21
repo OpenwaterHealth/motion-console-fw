@@ -25,10 +25,19 @@ volatile uint32_t lsync_counter = 0;
 
 static volatile bool s_current_slot_is_dark = false;
 
-/* Set by LSYNC_PeriodElapsedCallback; consumed by pdc_poll_tick() from main loop. */
-static volatile bool     s_pdc_sample_pending = false;
-static volatile bool     s_pdc_sample_dark    = false;
-static volatile uint32_t s_pdc_sample_frame   = 0;
+/* SPSC queue of pending PDC samples between the LSYNC ISR (producer) and the
+ * main-loop pdc_poll_tick (consumer). Sized for ~200 ms of slack at 40 Hz so
+ * brief main-loop stalls (USB bursts, comms handling) don't lose frames. */
+#define PDC_PENDING_CAPACITY 8
+typedef struct {
+    uint32_t frame_idx;
+    bool     dark_slot;
+} pdc_pending_t;
+static volatile pdc_pending_t s_pending_buf[PDC_PENDING_CAPACITY];
+static volatile uint16_t s_pending_head     = 0;  /* write idx (ISR) */
+static volatile uint16_t s_pending_tail     = 0;  /* read idx (main) */
+static volatile uint16_t s_pending_count    = 0;
+static volatile uint16_t s_pending_overwrites = 0;  /* drops-on-full since last consume */
 
 uint32_t short_lsync_arr = 0;
 uint32_t long_lsync_arr = 0;
@@ -254,7 +263,10 @@ HAL_StatusTypeDef Trigger_Start() {
 	lsync_counter = 1;
 	fsync_counter = 1;
 	s_current_slot_is_dark = false;
-	s_pdc_sample_pending = false;
+	s_pending_head = 0;
+	s_pending_tail = 0;
+	s_pending_count = 0;
+	s_pending_overwrites = 0;
 
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
 	__HAL_TIM_CLEAR_FLAG(&LASER_TIMER, TIM_FLAG_UPDATE);
@@ -382,11 +394,19 @@ void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 
 void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
-    /* Fires on laser-pulse falling edge.  Snapshot lsync_counter + slot bit
-     * for pdc_poll to consume from the main loop. */
-    s_pdc_sample_frame  = lsync_counter;
-    s_pdc_sample_dark   = s_current_slot_is_dark;
-    s_pdc_sample_pending = true;
+    /* Fires on laser-pulse falling edge.  Enqueue (frame_idx, dark_slot) for
+     * pdc_poll_tick to consume from the main loop.  Drop-oldest on overflow so
+     * the freshest samples win; the overwrite count propagates to the ring
+     * buffer's drop counter. */
+    if (s_pending_count == PDC_PENDING_CAPACITY) {
+        s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
+        s_pending_count--;
+        s_pending_overwrites++;
+    }
+    s_pending_buf[s_pending_head].frame_idx = lsync_counter;
+    s_pending_buf[s_pending_head].dark_slot = s_current_slot_is_dark;
+    s_pending_head = (uint16_t)((s_pending_head + 1) % PDC_PENDING_CAPACITY);
+    s_pending_count++;
 }
 
 bool get_current_slot_is_dark(void) { return s_current_slot_is_dark; }
@@ -394,12 +414,22 @@ bool get_current_slot_is_dark(void) { return s_current_slot_is_dark; }
 bool consume_pdc_sample_pending(bool *out_dark_slot, uint32_t *out_frame_idx)
 {
     __disable_irq();
-    bool pending = s_pdc_sample_pending;
+    bool pending = (s_pending_count > 0);
     if (pending) {
-        *out_dark_slot = s_pdc_sample_dark;
-        *out_frame_idx = s_pdc_sample_frame;
-        s_pdc_sample_pending = false;
+        *out_dark_slot = s_pending_buf[s_pending_tail].dark_slot;
+        *out_frame_idx = s_pending_buf[s_pending_tail].frame_idx;
+        s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
+        s_pending_count--;
     }
     __enable_irq();
     return pending;
+}
+
+uint16_t consume_pdc_pending_overwrites(void)
+{
+    __disable_irq();
+    uint16_t n = s_pending_overwrites;
+    s_pending_overwrites = 0;
+    __enable_irq();
+    return n;
 }

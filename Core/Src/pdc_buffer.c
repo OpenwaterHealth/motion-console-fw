@@ -47,3 +47,7 @@ uint16_t pdc_buffer_dropped_since_last_drain(void) {
 size_t pdc_buffer_count(void) {
     return s_count;
 }
+
+void pdc_buffer_account_drops(uint16_t n) {
+    s_dropped_pending = (uint16_t)(s_dropped_pending + n);
+}

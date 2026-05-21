@@ -27,6 +27,13 @@ void pdc_poll_init(void) {
 }
 
 void pdc_poll_tick(void) {
+    /* Account for any ISR-side queue overwrites so they surface in the same
+     * dropped-count channel as ring-buffer drops. */
+    uint16_t ow = consume_pdc_pending_overwrites();
+    if (ow > 0) {
+        pdc_buffer_account_drops(ow);
+    }
+
     /* Pick up any new pending sample from the LSYNC ISR. */
     if (!s_have_pending) {
         bool d; uint32_t f;
