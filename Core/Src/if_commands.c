@@ -129,7 +129,6 @@ extern volatile TecStats last_tec_stats;
 static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
 {
     _Bool ret = true;
-    int iRet = 0;
     uartResp->command = cmd->command;
     switch (cmd->command)
     {
@@ -143,6 +142,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         }
         else
         {
+            int iRet;
             memset(i2c_list, 0, 10);
             iRet = TCA9548A_scan_channel(cmd->data[0], cmd->data[1], i2c_list, 10, false);
             if (iRet < 0)

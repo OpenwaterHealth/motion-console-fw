@@ -87,7 +87,7 @@ void printUartPacket(const UartPacket* packet) {
 	printf("  CRC: 0x%04X\r\n\r\n", packet->crc);
 }
 
-static void UART_INTERFACE_SendDMA(UartPacket* pResp)
+static void UART_INTERFACE_SendDMA(const UartPacket* pResp)
 {
 	if (!pResp) return;
 	// Wait for previous transmission to complete
@@ -373,7 +373,7 @@ void comms_init(void) {
 }
 
 // Callback functions
-void comms_handle_RxCpltCallback(UART_HandleTypeDef *huart, uint16_t pos) {
+void comms_handle_RxCpltCallback(const UART_HandleTypeDef *huart, uint16_t pos) {
 
     if (huart->Instance == USART1) {
         // Notify the task
@@ -389,14 +389,14 @@ void CDC_handle_TxCpltCallback() {
 	tx_flag = 1;
 }
 
-void comms_handle_TxCallback(UART_HandleTypeDef *huart) {
+void comms_handle_TxCallback(const UART_HandleTypeDef *huart) {
 
 	if (huart->Instance == USART1) {
 		tx_flag = 1;
 	}
 }
 
-void comms_handle_ErrorCallback(UART_HandleTypeDef *huart) {
+void comms_handle_ErrorCallback(const UART_HandleTypeDef *huart) {
 
     if (huart->Instance == USART1) {
         // Handle errors here. Maybe reset DMA reception, etc.
