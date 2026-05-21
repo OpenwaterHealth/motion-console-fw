@@ -29,7 +29,7 @@ static uint8_t  s_initialised     = 0;
  * enabled, so it is a cheap, side-effect-free liveness signal. */
 static inline uint32_t usb_get_frame_number(void)
 {
-    USB_OTG_DeviceTypeDef *dev =
+    const USB_OTG_DeviceTypeDef *dev =
         (USB_OTG_DeviceTypeDef *)((uint32_t)USB_OTG_FS + USB_OTG_DEVICE_BASE);
     return (dev->DSTS & USB_OTG_DSTS_FNSOF_Msk) >> USB_OTG_DSTS_FNSOF_Pos;
 }

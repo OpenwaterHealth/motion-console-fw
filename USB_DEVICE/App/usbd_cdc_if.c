@@ -320,7 +320,7 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   if (hUsbDeviceFS.dev_state != USBD_STATE_CONFIGURED) {
     return USBD_FAIL;
   }
-  USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+  const USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
   if (hcdc == NULL) {
     return USBD_FAIL;
   }

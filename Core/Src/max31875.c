@@ -29,7 +29,7 @@ void MAX31875_Read_Reg(uint16_t DevAddress, uint8_t reg, uint8_t *dataR, uint8_t
 }
 
 /* Init Function */
-void MAX31875_Init(MAX31875_Init_t *tempInitDef)
+void MAX31875_Init(const MAX31875_Init_t *tempInitDef)
 {
 	uint8_t I2CData[3] = {0};													// declaration of uint8 data array
 
@@ -59,7 +59,7 @@ void MAX31875_Init(MAX31875_Init_t *tempInitDef)
 }
 
 /* Get Temperature */
-float MAX31875_Get_Temp(MAX31875_Init_t *tempInitDef)
+float MAX31875_Get_Temp(const MAX31875_Init_t *tempInitDef)
 {
 	float tempData = 0.0f;
 	uint8_t var[2];
