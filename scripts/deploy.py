@@ -85,9 +85,12 @@ def _enter_dfu_console(timeout: float) -> bool:
     from omotion import MotionInterface
 
     interface = MotionInterface()
-    interface.start(wait=True, wait_timeout=timeout)
+    interface.start(wait=False)
     try:
-        if not interface.console.is_connected():
+        # start(wait=True) only blocks on already-CONNECTING handles, so it
+        # races against the connection monitor's first sweep. wait_for_ready
+        # actually waits for CONNECTED.
+        if not interface.wait_for_ready(console=True, sensors=0, timeout=timeout):
             print("❌ Console not connected — cannot trigger DFU.")
             return False
 
@@ -131,9 +134,9 @@ def _soft_reset_console() -> bool:
     from omotion import MotionInterface
 
     interface = MotionInterface()
-    interface.start(wait=True, wait_timeout=5.0)
+    interface.start(wait=False)
     try:
-        if not interface.console.is_connected():
+        if not interface.wait_for_ready(console=True, sensors=0, timeout=5.0):
             return False
         try:
             interface.console.telemetry.stop()
@@ -213,9 +216,12 @@ def main() -> int:
         "-D", str(bin_file),
     ]
     rc = _run(cmd)
+    # dfu-util exit 74 ("Error during download get_status") after a successful
+    # download is a known STM32 ROM bootloader quirk: the device jumps to user
+    # firmware on :leave before dfu-util can read its final status. Trust the
+    # device's comeback as the source of truth rather than the exit code.
     if rc != 0:
-        print(f"❌ dfu-util exited with {rc}. Device is still in DFU; rerun deploy.py to retry.")
-        return 1
+        print(f"[!] dfu-util exited {rc}; checking whether the device came back …")
 
     print("[*] leaveDFU sent. Waiting for console to come back …")
     if _wait_for_console_comeback(timeout=COMEBACK_TIMEOUT_S):
