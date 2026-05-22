@@ -258,6 +258,24 @@ EMBED_TEMPLATES = {
             "command": "${KILL_OPENOCD_CMD}",
             "args": [${KILL_OPENOCD_ARGS}],
             "problemMatcher": []
+        },
+        {
+            "label": "Deploy Console",
+            "type": "shell",
+            "command": "python",
+            "args": [
+                "${workspaceFolder}/scripts/deploy.py"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "focus": true,
+                "panel": "dedicated"
+            },
+            "options": {
+                "cwd": "${workspaceFolder}"
+            }
         }
     ]
 }
