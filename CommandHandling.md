@@ -140,6 +140,7 @@ Examples include:
 | `OW_CTRL_TEC_STATUS` | Read TEC controller status and faults   |
 | `OW_CTRL_BOARDID`    | Read board identification information   |
 | `OW_CTRL_PDUMON`     | Read power distribution monitoring data |
+| `OW_CTRL_GET_PDC_BUFFER` | Drain up to N per-frame PDC samples from the SRAM ring buffer. Request payload: 1 byte = max_samples (1..64). Response: 2-byte LE drop counter + 1-byte sample count + N × 7-byte packed `{u32 frame_idx, u16 pdc_raw, u8 flags}`. `flags` bit 0 = `dark_slot`. |
 
 Each command defines its own payload format and response payload.
 

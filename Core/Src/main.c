@@ -28,6 +28,7 @@
 #include "usbd_cdc_if.h"
 #include "uart_comms.h"
 #include "trigger.h"
+#include "pdc_poll.h"
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
@@ -569,6 +570,7 @@ int main(void)
   HAL_Delay(100);
 
   comms_init();
+  pdc_poll_init();
   /* Start TIM4 interrupt for telemetry polling (250 ms) */
   HAL_TIM_Base_Start_IT(&htim4);
 
@@ -584,6 +586,7 @@ int main(void)
     comms_process();
     telemetry_poll();
     usb_recovery_task();
+    pdc_poll_tick();
     HAL_Delay(1);
   }
   /* USER CODE END 3 */
@@ -1741,6 +1744,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   if (htim->Instance == FSYNC_TIMER.Instance) {
     FSYNC_PeriodElapsedCallback(htim);
+  }
+  if (htim->Instance == LASER_TIMER.Instance) {
+    LSYNC_PeriodElapsedCallback(htim);
   }
 
   if (htim->Instance == TIM12) {

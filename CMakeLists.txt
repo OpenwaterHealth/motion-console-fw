@@ -118,6 +118,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/motion_config.c
     Core/Src/fpga_register_map.c
     Core/Src/utils.c
+    Core/Src/pdc_buffer.c
+    Core/Src/pdc_poll.c
 )
 
 # Add include paths

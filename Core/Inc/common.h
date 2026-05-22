@@ -110,6 +110,7 @@ typedef enum {
 	OW_CTRL_TEC_STATUS = 0x22,
 	OW_CTRL_BOARDID = 0x23,
 	OW_CTRL_PDUMON = 0x24,
+	OW_CTRL_GET_PDC_BUFFER = 0x25,
 } MotionControllerCommands;
 
 typedef enum {

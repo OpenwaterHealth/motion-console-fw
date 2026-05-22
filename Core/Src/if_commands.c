@@ -20,6 +20,7 @@
 #include "led_driver.h"
 #include "motion_config.h"
 #include "msg_queue.h"
+#include "pdc_buffer.h"
 
 #include <string.h>
 
@@ -497,6 +498,29 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->data_len = (uint16_t)sizeof(pdu_frame);
         uartResp->data = pdu_frame.bytes;
         break;
+    case OW_CTRL_GET_PDC_BUFFER: {
+        uartResp->command = OW_CTRL_GET_PDC_BUFFER;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+
+        /* Request payload: 1 byte = max_samples (clamped to 64). */
+        uint8_t requested = (cmd->data_len >= 1) ? cmd->data[0] : 64;
+        if (requested == 0 || requested > 64) requested = 64;
+
+        /* Response layout: [dropped:u16 LE][count:u8][count * sizeof(pdc_sample_t)] */
+        static pdc_sample_t drained[64];
+        size_t n = pdc_buffer_drain(drained, requested);
+        uint16_t dropped = pdc_buffer_dropped_since_last_drain();
+
+        static uint8_t resp[3 + 64 * sizeof(pdc_sample_t)];
+        resp[0] = (uint8_t)(dropped & 0xFF);
+        resp[1] = (uint8_t)((dropped >> 8) & 0xFF);
+        resp[2] = (uint8_t)n;
+        memcpy(&resp[3], drained, n * sizeof(pdc_sample_t));
+
+        uartResp->data_len = (uint16_t)(3 + n * sizeof(pdc_sample_t));
+        uartResp->data = resp;
+    } break;
     default:
         uartResp->data_len = 0;
         uartResp->packet_type = OW_UNKNOWN;
