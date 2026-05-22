@@ -21,6 +21,7 @@
 #include "motion_config.h"
 #include "msg_queue.h"
 #include "pdc_buffer.h"
+#include "odometer.h"
 
 #include <string.h>
 
@@ -115,6 +116,8 @@ static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
+static uint32_t last_system_odo = 0;
+static uint32_t last_laser_odo = 0;
 
 static float tecadc_last_volts[4];
 static uint16_t tecadc_last_raw[4];
@@ -521,6 +524,22 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->data_len = (uint16_t)(3 + n * sizeof(pdc_sample_t));
         uartResp->data = resp;
     } break;
+    case OW_CTRL_GET_SYSTEM_ODO:
+        uartResp->command = OW_CTRL_GET_SYSTEM_ODO;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        uartResp->data_len = 4;
+        last_system_odo = Odometer_Get_System_Minutes();
+        uartResp->data = (uint8_t *)&last_system_odo;
+        break;
+    case OW_CTRL_GET_LASER_ODO:
+        uartResp->command = OW_CTRL_GET_LASER_ODO;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        uartResp->data_len = 4;
+        last_laser_odo = Odometer_Get_Laser_Pulses();
+        uartResp->data = (uint8_t *)&last_laser_odo;
+        break;
     default:
         uartResp->data_len = 0;
         uartResp->packet_type = OW_UNKNOWN;

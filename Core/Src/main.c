@@ -45,6 +45,7 @@
 #include "jsmn.h"
 #include "utils.h"
 #include "msg_queue.h"
+#include "odometer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -563,6 +564,12 @@ int main(void)
   motion_cfg_get();
   motion_cfg_apply_settings();
 
+  // Initialize odometers
+  printf("Initialize odometers\r\n");
+  if(Odometer_Init() != HAL_OK){
+      printf("Failed to initialize odometers\r\n");
+  }
+
   HAL_Delay(100);
 
   // Enable USB HUB
@@ -587,6 +594,7 @@ int main(void)
     telemetry_poll();
     usb_recovery_task();
     pdc_poll_tick();
+    Odometer_Update_System();
     HAL_Delay(1);
   }
   /* USER CODE END 3 */

@@ -8,6 +8,7 @@
 #include "main.h"
 #include "trigger.h"
 #include "usb_events.h"
+#include "odometer.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -278,6 +279,9 @@ HAL_StatusTypeDef Trigger_Start() {
 	s_pending_count = 0;
 	s_pending_overwrites = 0;
 
+	/* Update laser odometer at scan start */
+	Odometer_Scan_Start();
+
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
 	__HAL_TIM_CLEAR_FLAG(&LASER_TIMER, TIM_FLAG_UPDATE);
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
@@ -303,6 +307,9 @@ HAL_StatusTypeDef Trigger_Stop() {
 
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
+
+	/* Update laser odometer at scan finish */
+	Odometer_Scan_Finish();
 
     return HAL_OK;
 }
