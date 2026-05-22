@@ -540,6 +540,29 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         last_laser_odo = Odometer_Get_Laser_Pulses();
         uartResp->data = (uint8_t *)&last_laser_odo;
         break;
+    case OW_CTRL_RESET_ODO: {
+        uartResp->command = OW_CTRL_RESET_ODO;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        /* Request payload: 1 byte = target (0=system, 1=laser, 2=both).
+         * No payload defaults to "both" for caller convenience. */
+        OdoResetTarget target = ODO_RESET_BOTH;
+        if (cmd->data_len >= 1) {
+            if (cmd->data[0] > (uint8_t)ODO_RESET_BOTH) {
+                uartResp->data_len = 0;
+                uartResp->packet_type = OW_ERROR;
+                break;
+            }
+            target = (OdoResetTarget)cmd->data[0];
+        }
+        static uint8_t reset_resp;
+        reset_resp = (Odometer_Reset(target) == HAL_OK) ? 0 : 1;
+        uartResp->data_len = 1;
+        uartResp->data = &reset_resp;
+        if (reset_resp != 0) {
+            uartResp->packet_type = OW_ERROR;
+        }
+    } break;
     default:
         uartResp->data_len = 0;
         uartResp->packet_type = OW_UNKNOWN;
