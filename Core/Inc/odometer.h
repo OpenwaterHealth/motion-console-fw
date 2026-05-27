@@ -9,11 +9,18 @@
 #define INC_ODOMETER_H_
 
 #include "stm32h7xx_hal.h"
+#include "memory_map.h"
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Flash memory addresses for odometer storage */
-#define ODOMETER_FLASH_BASE_ADDR    (FLASH_USER_START_ADDR)
+/* Flash memory addresses for odometer storage.
+ *
+ * Lives in its own 128 KB sector (sector 6 bank 2 via FLASH_ODOMETER_START_ADDR),
+ * distinct from FLASH_USER_START_ADDR which is owned by motion_config. The
+ * STM32H7 minimum erase granularity is one 128 KB sector, so the two stores
+ * must not co-tenant — otherwise either Odometer_Persist_Both() or
+ * motion_cfg flash writes would wipe the other tenant. */
+#define ODOMETER_FLASH_BASE_ADDR    (FLASH_ODOMETER_START_ADDR)
 #define SYSTEM_ODO_FLASH_ADDR       (ODOMETER_FLASH_BASE_ADDR)
 #define LASER_ODO_FLASH_ADDR        (ODOMETER_FLASH_BASE_ADDR + 32)
 
