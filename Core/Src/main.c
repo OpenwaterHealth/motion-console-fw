@@ -468,8 +468,10 @@ int main(void)
 
   trigger_init();
   
-  // config trigger timers
-  Trigger_Config_t triggerSetup;
+  // config trigger timers; zero-init so unassigned fields (e.g.
+  // LaserPulseSkipDelayUsec) don't inherit stack garbage — a nonzero skip
+  // delay inflates the long LSYNC slot and halves the laser rate at boot
+  Trigger_Config_t triggerSetup = {0};
   triggerSetup.frequencyHz = 40.0f;
   triggerSetup.triggerPulseWidthUsec = 1000;
   triggerSetup.laserPulseDelayUsec = 250;
