@@ -36,7 +36,7 @@ static uint32_t GetSector(uint32_t Address)
 __attribute__((section(".ramfunc")))
 HAL_StatusTypeDef Flash_Write(uint32_t address, const uint32_t *data, uint32_t size_words)
 {
-    HAL_StatusTypeDef status;
+    HAL_StatusTypeDef status = HAL_OK;
     uint32_t flash_word[8];
 
     HAL_FLASH_Unlock();

@@ -123,7 +123,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 		for (j = 0; j < numPgs; ++j)
 		{
 #ifdef DEBUG_ECA
-			printf("Cfg page: %d\r\n", j+1);
+			printf("Cfg page: %u\r\n", j + 1);
 #endif
 			status = XO2ECAcmd_CfgWritePage(pXO2dev, p);
 
@@ -151,7 +151,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 			for (i = 0; i < numPgs; i++)
 			{
 #ifdef DEBUG_ECA
-				printf("Verify CfgPage: %d\r\n", i + 1);
+				printf("Verify CfgPage: %u\r\n", i + 1);
 #endif
 							
 				// Read back the programmed page
@@ -159,7 +159,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (status != OK)
 				{
 #ifdef DEBUG_ECA
-					printf("CfgReadPage(%d) ERR\r\n", i + 1);
+					printf("CfgReadPage(%u) ERR\r\n", i + 1);
 #endif
 					ret = -14;
 					goto PROG_ABORT;
@@ -170,7 +170,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 					if (buf[j] != p[j])
 					{
 #ifdef DEBUG_ECA
-						printf("Verify CfgPage(%d) ERR\r\n", i + 1);
+						printf("Verify CfgPage(%u) ERR\r\n", i + 1);
 #endif
 						ret = -15;
 						goto PROG_ABORT;
@@ -208,7 +208,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 		for (j = 0; j < numPgs; ++j)
 		{
 #ifdef DEBUG_ECA
-			printf("UFM page: %d\r\n", j+1);
+			printf("UFM page: %u\r\n", j + 1);
 #endif
 			status = XO2ECAcmd_UFMWritePage(pXO2dev, p);
 			if (status != OK)
@@ -237,7 +237,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 			for (i = 0; i < numPgs; i++)
 			{
 #ifdef DEBUG_ECA
-				printf("Verify UFMPage: %d\r\n", i + 1);
+				printf("Verify UFMPage: %u\r\n", i + 1);
 #endif
 				
 				// Readback the programmed page
@@ -245,7 +245,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (status != OK)
 				{
 #ifdef DEBUG_ECA
-					printf("UFMReadPage(%d) ERR\r\n", i + 1);
+					printf("UFMReadPage(%u) ERR\r\n", i + 1);
 #endif
 					ret = -24;
 					goto PROG_ABORT;
@@ -256,7 +256,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 					if (buf[j] != p[j])
 					{
 #ifdef DEBUG_ECA
-						printf("Verify UFMPage(%d) ERR\r\n", i + 1);
+						printf("Verify UFMPage(%u) ERR\r\n", i + 1);
 #endif
 						ret = -25;
 						goto PROG_ABORT;
@@ -309,7 +309,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (featRow.feature[i] != pProgJED->pFeatureRow->feature[i])
 				{
 #ifdef DEBUG_ECA
-					printf("FeatureRow Verify ERR @ feature[%d]\r\n", i);
+					printf("FeatureRow Verify ERR @ feature[%u]\r\n", i);
 #endif
 					ret = -32;
 					goto PROG_ABORT;
@@ -320,7 +320,7 @@ int XO2ECA_apiProgram(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED, int mod
 				if (featRow.feabits[i] != pProgJED->pFeatureRow->feabits[i])
 				{
 #ifdef DEBUG_ECA
-					printf("FeatureRow Verify ERR @ feabits[%d]\r\n", i);
+					printf("FeatureRow Verify ERR @ feabits[%u]\r\n", i);
 #endif
 					ret = -33;
 					goto PROG_ABORT;
@@ -432,7 +432,7 @@ int XO2ECA_apiEraseFlash(XO2Handle_t *pXO2dev,  int mode)
  * Display info about JEDEC data structure.
  * @param pXO2dev reference to the XO2 device to access and program
  */
-void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED)
+void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED)
 {
 
 	printf("JEDEC Data Structure:\r\n");
@@ -452,7 +452,7 @@ void XO2ECA_apiJEDECinfo(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED)
  *  @param pXO2dev reference to the XO2 device to access and program
  * @return OK if compatible.  ERROR if JEDEC file for different device, not compatible.
  */
-int XO2ECA_apiJEDECverify(XO2Handle_t *pXO2dev, XO2_JEDEC_t *pProgJED)
+int XO2ECA_apiJEDECverify(XO2Handle_t *pXO2dev, const XO2_JEDEC_t *pProgJED)
 {
 
 
@@ -546,9 +546,9 @@ int XO2ECA_apiReadBackUFM(XO2Handle_t *pXO2dev, int startPg, int numPgs, unsigne
 		pBuf = pBuf + 16;  // point to next page of data
 	}
 	
-	status = XO2ECAcmd_closeCfgIF(pXO2dev); 
+	(void)XO2ECAcmd_closeCfgIF(pXO2dev); 
 
-	status = XO2ECAcmd_Bypass(pXO2dev); 
+	(void)XO2ECAcmd_Bypass(pXO2dev); 
 	
 	return(ret);
 
@@ -632,9 +632,9 @@ int XO2ECA_apiWriteUFM(XO2Handle_t *pXO2dev, int startPg, int numPgs, unsigned c
 		pBuf = pBuf + 16;  // point to next page of data
 	}
 	
-	status = XO2ECAcmd_closeCfgIF(pXO2dev); 
+	(void)XO2ECAcmd_closeCfgIF(pXO2dev); 
 
-	status = XO2ECAcmd_Bypass(pXO2dev); 
+	(void)XO2ECAcmd_Bypass(pXO2dev); 
 	
 	return(ret);
 }
@@ -698,13 +698,13 @@ int XO2ECA_apiGetHdwStatus(XO2Handle_t *pXO2dev, unsigned int *pVal)
 	{
 		printf("XO2 Status Register = %x\r\n", regVal);
 		*pVal = 0;
-		if (regVal & 0x00000100)
-			*pVal = *pVal | 1;
-		if (regVal & 0x00001000)
-			*pVal = *pVal | 2;
-		if (regVal & 0x00002000)
-			*pVal = *pVal | 4;
-		*pVal = *pVal | ((regVal>>19) & 0x70);
+		if (regVal & 0x00000100u)
+			*pVal |= 1u;
+		if (regVal & 0x00001000u)
+			*pVal |= 2u;
+		if (regVal & 0x00002000u)
+			*pVal |= 4u;
+		*pVal |= ((regVal >> 19) & 0x7U) << 4;
 	}
 	else
 	{

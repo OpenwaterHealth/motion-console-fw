@@ -93,6 +93,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
     USB_DEVICE/App/usb_events.c
+    USB_DEVICE/App/usb_recovery.c
     Core/Src/ad5761r.c
     Core/Src/ads7828.c
     Core/Src/ads7924.c
@@ -117,6 +118,9 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/motion_config.c
     Core/Src/fpga_register_map.c
     Core/Src/utils.c
+    Core/Src/pdc_buffer.c
+    Core/Src/pdc_poll.c
+    Core/Src/odometer.c
 )
 
 # Add include paths
@@ -146,3 +150,22 @@ add_custom_command(TARGET ${CMAKE_PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_OBJCOPY} -O binary $<TARGET_FILE:${CMAKE_PROJECT_NAME}> ${CMAKE_PROJECT_NAME}.bin
     COMMENT "Generating .hex and .bin files"
 )
+
+# Build + DFU-flash target. Invokes scripts/deploy.py which:
+#   1. enters DFU via the omotion SDK
+#   2. waits for the STM32 ROM bootloader to enumerate
+#   3. flashes the .bin via dfu-util with :leave for auto-reset
+# Requires: dfu-util on PATH, omotion installed in the active Python env.
+find_program(PYTHON_FOR_DEPLOY NAMES python3 python)
+if(PYTHON_FOR_DEPLOY)
+    add_custom_target(flash
+        COMMAND ${PYTHON_FOR_DEPLOY} ${CMAKE_SOURCE_DIR}/scripts/deploy.py
+                --config $<CONFIG> --no-build
+        DEPENDS ${CMAKE_PROJECT_NAME}
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        USES_TERMINAL
+        COMMENT "Flashing ${CMAKE_PROJECT_NAME} via DFU"
+    )
+else()
+    message(WARNING "Python not found — `flash` target will not be available")
+endif()

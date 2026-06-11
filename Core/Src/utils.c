@@ -323,7 +323,7 @@ uint16_t util_crc16(const uint8_t *buf, uint32_t size)
 uint16_t util_hw_crc16(uint8_t *buf, uint32_t size)
 {
 	uint32_t uwCRCValue = HAL_CRC_Accumulate(&hcrc, (uint32_t *)buf, size);
-	printf("uwCRCValue 0x%08lx\r\n", uwCRCValue);
+	printf("uwCRCValue 0x%08lx\r\n", (unsigned long)uwCRCValue);
 	return (uint16_t)uwCRCValue;
 }
 

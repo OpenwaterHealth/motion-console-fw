@@ -54,9 +54,9 @@ typedef struct __attribute__((packed)) {
 
 void comms_init(void);
 void comms_process(void);
-void comms_handle_RxCpltCallback(UART_HandleTypeDef *huart, uint16_t Size);
-void comms_handle_TxCallback(UART_HandleTypeDef *huart);
-void comms_handle_ErrorCallback(UART_HandleTypeDef *huart);
+void comms_handle_RxCpltCallback(const UART_HandleTypeDef *huart, uint16_t Size);
+void comms_handle_TxCallback(const UART_HandleTypeDef *huart);
+void comms_handle_ErrorCallback(const UART_HandleTypeDef *huart);
 
 void CDC_handle_TxCpltCallback();
 void printUartPacket(const UartPacket* packet);

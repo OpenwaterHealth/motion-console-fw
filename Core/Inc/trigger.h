@@ -33,7 +33,7 @@ void trigger_init(void);
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config);
 HAL_StatusTypeDef Trigger_Start() ;
 HAL_StatusTypeDef Trigger_Stop();
-HAL_StatusTypeDef Trigger_SetConfigFromJSON(char *jsonString, size_t str_len);
+HAL_StatusTypeDef Trigger_SetConfigFromJSON(const char *jsonString, size_t str_len);
 HAL_StatusTypeDef Trigger_GetConfigToJSON(char *jsonString, size_t max_length);
 uint32_t get_lsync_pulse_count(void);
 uint32_t get_fsync_pulse_count(void);
@@ -45,6 +45,10 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 
 void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+bool get_current_slot_is_dark(void);
+bool consume_pdc_sample_pending(bool *out_dark_slot, uint32_t *out_frame_idx);
+uint16_t consume_pdc_pending_overwrites(void);
 
 extern Trigger_Config_t trigger_config;
 

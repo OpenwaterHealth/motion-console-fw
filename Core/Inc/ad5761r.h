@@ -104,7 +104,7 @@ HAL_StatusTypeDef ad5761r_write(ad5761r_dev *dev,
 		      uint8_t reg_addr_cmd,
 		      uint16_t reg_data);
 /* SPI read from device. */
-HAL_StatusTypeDef ad5761r_read(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_read(const ad5761r_dev *dev,
 		     uint8_t reg_addr_cmd,
 		     uint16_t *reg_data);
 /* Readback the register data. */
@@ -117,73 +117,73 @@ HAL_StatusTypeDef ad5761r_config(ad5761r_dev *dev);
 HAL_StatusTypeDef ad5761r_set_daisy_chain_en_dis(ad5761r_dev *dev,
 				       bool en_dis);
 /* Get the status of the daisy-chain mode. */
-HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_daisy_chain_en_dis(const ad5761r_dev *dev,
 				       bool *en_dis);
 /* Set the output_range. */
 HAL_StatusTypeDef ad5761r_set_output_range(ad5761r_dev *dev,
 				 enum ad5761r_range out_range);
 /* Get the output_range. */
-HAL_StatusTypeDef ad5761r_get_output_range(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_output_range(const ad5761r_dev *dev,
 				 enum ad5761r_range *out_range);
 /* Set the power up voltage. */
 HAL_StatusTypeDef ad5761r_set_power_up_voltage(ad5761r_dev *dev,
 				     enum ad5761r_scale pv);
 /* Get the power up voltage. */
-HAL_StatusTypeDef ad5761r_get_power_up_voltage(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_power_up_voltage(const ad5761r_dev *dev,
 				     enum ad5761r_scale *pv);
 /* Set the clear voltage. */
 HAL_StatusTypeDef ad5761r_set_clear_voltage(ad5761r_dev *dev,
 				  enum ad5761r_scale cv);
 /* Get the clear voltage. */
-HAL_StatusTypeDef ad5761r_get_clear_voltage(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_clear_voltage(const ad5761r_dev *dev,
 				  enum ad5761r_scale *cv);
 /* Enable/disable internal reference. */
 HAL_StatusTypeDef ad5761r_set_internal_reference_en_dis(ad5761r_dev *dev,
 		bool en_dis);
 /* Get the status of the internal reference. */
-HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_internal_reference_en_dis(const ad5761r_dev *dev,
 		bool *en_dis);
 /* Enable/disable ETS (exceed temperature shutdown) function. */
 HAL_StatusTypeDef ad5761r_set_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
 		bool en_dis);
 /* Get the status of the ETS (exceed temperature shutdown) function. */
-HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_exceed_temp_shutdown_en_dis(const ad5761r_dev *dev,
 		bool *en_dis);
 /* Enable/disable the twos complement bipolar output range. */
 HAL_StatusTypeDef ad5761r_set_2c_bipolar_range_en_dis(ad5761r_dev *dev,
 		bool en_dis);
 /* Get the status of the twos complement bipolar output range. */
-HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_2c_bipolar_range_en_dis(const ad5761r_dev *dev,
 		bool *en_dis);
 /* Enable/disable the 5% overrange. */
 HAL_StatusTypeDef ad5761r_set_overrange_en_dis(ad5761r_dev *dev,
 				     bool en_dis);
 /* Get the status of the 5% overrange. */
-HAL_StatusTypeDef ad5761r_get_overrange_en_dis(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_overrange_en_dis(const ad5761r_dev *dev,
 				     bool *en_dis);
 /* Get the short-circuit condition. */
-HAL_StatusTypeDef ad5761r_get_short_circuit_condition(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_short_circuit_condition(const ad5761r_dev *dev,
 		bool *sc);
 /* Get the brownout condition. */
-HAL_StatusTypeDef ad5761r_get_brownout_condition(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_brownout_condition(const ad5761r_dev *dev,
 				       bool *bo);
 /* Set the reset pin value. */
 HAL_StatusTypeDef ad5761r_set_reset_pin(ad5761r_dev *dev,
 		GPIO_PinState value);
 /* Get the reset pin value. */
-HAL_StatusTypeDef ad5761r_get_reset_pin(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_reset_pin(const ad5761r_dev *dev,
 		GPIO_PinState *value);
 /* Set the clr pin value. */
 HAL_StatusTypeDef ad5761r_set_clr_pin(ad5761r_dev *dev,
 		GPIO_PinState value);
 /* Get the clr pin value. */
-HAL_StatusTypeDef ad5761r_get_clr_pin(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_clr_pin(const ad5761r_dev *dev,
 		GPIO_PinState *value);
 /* Set the ldac pin value. */
 HAL_StatusTypeDef ad5761r_set_ldac_pin(ad5761r_dev *dev,
 		GPIO_PinState value);
 /* Get the ldac pin value. */
-HAL_StatusTypeDef ad5761r_get_ldac_pin(ad5761r_dev *dev,
+HAL_StatusTypeDef ad5761r_get_ldac_pin(const ad5761r_dev *dev,
 		GPIO_PinState *value);
 /* Write to input register. */
 HAL_StatusTypeDef ad5761r_write_input_register(ad5761r_dev *dev,

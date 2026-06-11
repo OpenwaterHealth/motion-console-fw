@@ -20,6 +20,7 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
+#include "usb_recovery.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -27,6 +28,7 @@
 #include "usbd_cdc_if.h"
 #include "uart_comms.h"
 #include "trigger.h"
+#include "pdc_poll.h"
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
@@ -43,6 +45,7 @@
 #include "jsmn.h"
 #include "utils.h"
 #include "msg_queue.h"
+#include "odometer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -116,6 +119,7 @@ double EE_GAIN_VALUE = 0.0;
 uint16_t EE_THRESH_VALUE = 0;
 
 ad5761r_dev tec_dac;
+
 volatile bool _enter_dfu = false;
 
 
@@ -216,6 +220,60 @@ void delay_ms(uint32_t ms)
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
+/* Write one FPGA register from a parsed JSON key/value pair.
+ * Returns true so the caller can unconditionally continue to the next key. */
+static bool apply_fpga_register_setting(const FpgaRegister *reg,
+                                        const char *keybuf,
+                                        const char *tmpval)
+{
+    if (reg->direction == FPGA_DIR_RD) {
+        printf("%s is read-only, skipping write\r\n", keybuf);
+        return true;
+    }
+
+    double val    = strtod(tmpval, NULL);
+    double scale  = (reg->scale != 0.0f) ? (double)reg->scale : 1.0;
+    double scaled = val / scale;
+    if (scaled < 0) { scaled = 0; }
+
+    uint32_t raw = (uint32_t)(scaled + 0.5);
+    uint8_t data_buf[4] = {0, 0, 0, 0};
+    if (reg->data_len > 4) {
+        printf("Warning: data_len %u > 4, truncating\r\n", reg->data_len);
+    }
+    for (uint8_t b = 0; b < reg->data_len && b < 4; b++) {
+        data_buf[b] = (uint8_t)((raw >> (8u * b)) & 0xFFu);
+    }
+
+    int8_t wret = TCA9548A_Write_Data(reg->muxIdx, reg->channel, reg->i2cAddr,
+                                      reg->offset, reg->data_len, data_buf);
+    if (wret != TCA9548A_OK) {
+        printf("ERROR writing %s to FPGA (ret=%d)\r\n", keybuf, (int)wret);
+    } else {
+        printf("Wrote %s -> raw=0x%08lX (len=%u)\r\n", keybuf, (unsigned long)raw, reg->data_len);
+    }
+    return true;
+}
+
+/* Apply TEC_TRIP temperature setpoint from a parsed JSON value string. */
+static void apply_tec_trip_setting(const char *tmpval)
+{
+    char *endptr;
+    double TEC_TRIP = strtod(tmpval, &endptr);
+
+    if (endptr == tmpval) {
+        printf("Invalid TEC_TRIP value: %s\r\n", tmpval);
+        return;
+    }
+
+    printf("TEC_TRIP found: %.3f\r\n", TEC_TRIP);
+
+    double r_th = temperature_to_resistance(TEC_TRIP);
+    TEC_TRIP_VALUE = solve_v(r_th);
+
+    printf("R_TH: %.2f Ohms -> Voltage: %.3f V\r\n", r_th, TEC_TRIP_VALUE);
+}
+
 void motion_cfg_apply_settings(void)
 {
     const char *json_str = motion_cfg_get_json_ptr();
@@ -225,34 +283,31 @@ void motion_cfg_apply_settings(void)
     jsmntok_t tokens[32];
 
     jsmn_init(&parser, NULL);
-    int r = jsmn_parse(&parser, json_str, strlen(json_str), tokens, sizeof(tokens) / sizeof(tokens[0]), NULL);
+    int r = jsmn_parse(&parser, json_str, strlen(json_str), tokens,
+                       sizeof(tokens) / sizeof(tokens[0]), NULL);
 
-    if (r >= 1 && tokens[0].type == JSMN_OBJECT) {
-      for (int i = 1; i < r; i++) {
-        if (tokens[i].type != JSMN_STRING) {
-          continue;
-        }
+    if (r < 1 || tokens[0].type != JSMN_OBJECT) {
+        printf("Failed to parse JSON or no object found\n");
+        return;
+    }
+
+    for (int i = 1; i < r; i++) {
+        if (tokens[i].type != JSMN_STRING) { continue; }
 
         int key_start = tokens[i].start;
-        int key_len = tokens[i].end - tokens[i].start;
+        int key_len   = tokens[i].end - tokens[i].start;
 
         i++;
-        if (i >= r) {
-          break;
-        }
-
-        if (tokens[i].type != JSMN_PRIMITIVE) {
-          continue;
-        }
+        if (i >= r) { break; }
+        if (tokens[i].type != JSMN_PRIMITIVE) { continue; }
 
         int val_start = tokens[i].start;
-        int val_len = tokens[i].end - tokens[i].start;
+        int val_len   = tokens[i].end - tokens[i].start;
         char tmpval[64];
         int copy_len = (val_len < (int)sizeof(tmpval) - 1) ? val_len : (int)sizeof(tmpval) - 1;
         memcpy(tmpval, json_str + val_start, copy_len);
         tmpval[copy_len] = '\0';
 
-        // Try generic FPGA register write if key matches a register friendly name
         char keybuf[64];
         int key_copy_len = (key_len < (int)sizeof(keybuf) - 1) ? key_len : (int)sizeof(keybuf) - 1;
         memcpy(keybuf, json_str + key_start, key_copy_len);
@@ -260,60 +315,14 @@ void motion_cfg_apply_settings(void)
 
         const FpgaRegister *reg = fpga_register_lookup(keybuf);
         if (reg != NULL) {
-          if (reg->direction == FPGA_DIR_RD) {
-          printf("%s is read-only, skipping write\r\n", keybuf);
-          continue;
-          }
-
-          double val = strtod(tmpval, NULL);
-          double scale = (reg->scale != 0.0f) ? (double)reg->scale : 1.0;
-          double scaled = val / scale;
-          if (scaled < 0) scaled = 0; // clamp
-
-          uint32_t raw = (uint32_t)(scaled + 0.5);
-          uint8_t data_buf[4] = {0,0,0,0};
-          /* copy least-significant bytes of raw into buffer (little-endian) */
-          if (reg->data_len > 4) {
-            /* limit to 4 bytes to avoid overflow */
-            printf("Warning: data_len %u > 4, truncating\r\n", reg->data_len);
-          }
-          for (uint8_t b = 0; b < reg->data_len && b < 4; b++) {
-            data_buf[b] = (uint8_t)((raw >> (8*b)) & 0xFF);
-          }
-
-          int8_t wret = TCA9548A_Write_Data(reg->muxIdx, reg->channel, reg->i2cAddr, reg->offset, reg->data_len, data_buf);
-          if (wret != TCA9548A_OK) {
-            printf("ERROR writing %s to FPGA (ret=%d)\r\n", keybuf, (int)wret);
-          } else {
-            printf("Wrote %s -> raw=0x%08lX (len=%u)\r\n", keybuf, (unsigned long)raw, reg->data_len);
-          }
-          continue;
+            (void)apply_fpga_register_setting(reg, keybuf, tmpval);
+            continue;
         }
 
-        // TEC_TRIP (integer)
         if (key_len == (int)strlen("TEC_TRIP") &&
-          strncmp(json_str + key_start, "TEC_TRIP", key_len) == 0) {
-
-          char *endptr;
-          double TEC_TRIP = strtod(tmpval, &endptr);
-
-          if (endptr == tmpval) {
-              printf("Invalid TEC_TRIP value: %s\r\n", tmpval);
-              continue;
-          }
-
-          printf("TEC_TRIP found: %.3f\r\n", TEC_TRIP);
-
-          double r_th = temperature_to_resistance(TEC_TRIP);
-          TEC_TRIP_VALUE = solve_v(r_th);
-
-          printf("R_TH: %.2f Ohms -> Voltage: %.3f V\r\n", r_th, TEC_TRIP_VALUE);
-          continue;
+            strncmp(json_str + key_start, "TEC_TRIP", key_len) == 0) {
+            apply_tec_trip_setting(tmpval);
         }
-
-      }
-    } else {
-      printf("Failed to parse JSON or no object found\n");
     }
 }
 
@@ -459,8 +468,10 @@ int main(void)
 
   trigger_init();
   
-  // config trigger timers
-  Trigger_Config_t triggerSetup;
+  // config trigger timers; zero-init so unassigned fields (e.g.
+  // LaserPulseSkipDelayUsec) don't inherit stack garbage — a nonzero skip
+  // delay inflates the long LSYNC slot and halves the laser rate at boot
+  Trigger_Config_t triggerSetup = {0};
   triggerSetup.frequencyHz = 40.0f;
   triggerSetup.triggerPulseWidthUsec = 1000;
   triggerSetup.laserPulseDelayUsec = 250;
@@ -545,6 +556,8 @@ int main(void)
 
   // Init USB
   MX_USB_DEVICE_Init();
+  // Arm the EFT/EMC watchdog that recovers the OTG_FS link if it hangs.
+  usb_recovery_init();
   // Initialize message queue for system JSON messages
   printf("Initialize message queue\r\n");
   mq_init();
@@ -553,6 +566,12 @@ int main(void)
   motion_cfg_get();
   motion_cfg_apply_settings();
 
+  // Initialize odometers
+  printf("Initialize odometers\r\n");
+  if(Odometer_Init() != HAL_OK){
+      printf("Failed to initialize odometers\r\n");
+  }
+
   HAL_Delay(100);
 
   // Enable USB HUB
@@ -560,6 +579,7 @@ int main(void)
   HAL_Delay(100);
 
   comms_init();
+  pdc_poll_init();
   /* Start TIM4 interrupt for telemetry polling (250 ms) */
   HAL_TIM_Base_Start_IT(&htim4);
 
@@ -574,6 +594,9 @@ int main(void)
     /* USER CODE BEGIN 3 */
     comms_process();
     telemetry_poll();
+    usb_recovery_task();
+    pdc_poll_tick();
+    Odometer_Update_System();
     HAL_Delay(1);
   }
   /* USER CODE END 3 */
@@ -1731,6 +1754,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   if (htim->Instance == FSYNC_TIMER.Instance) {
     FSYNC_PeriodElapsedCallback(htim);
+  }
+  if (htim->Instance == LASER_TIMER.Instance) {
+    LSYNC_PeriodElapsedCallback(htim);
   }
 
   if (htim->Instance == TIM12) {

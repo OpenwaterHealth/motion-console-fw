@@ -36,59 +36,35 @@ bool FAN_SetPWMDuty(FAN_Driver *dev, uint8_t duty_code) {
     return fan_write(dev, MAX6663_REG_PWM_CONFIG, duty_code);
 }
 
+/* Lookup table: PWM register code (0x0–0xF) → duty-cycle percent (Table 9). */
+static const uint8_t pwm_code_to_percent[16] = {
+    0, 7, 14, 20, 27, 33, 40, 47, 53, 60, 67, 73, 80, 87, 93, 100
+};
+
 bool FAN_SetManualPWM(FAN_Driver *dev, uint8_t duty_percent) {
-    uint8_t duty_code;
+    if (duty_percent > 100U) { duty_percent = 100U; }
 
-    if (duty_percent > 100) duty_percent = 100;
+    /* Find the highest settable code (0x0–0xE) whose threshold ≤ duty_percent. */
+    uint8_t duty_code = 0U;
+    for (int8_t i = 14; i >= 0; i--) {
+        if (duty_percent >= pwm_code_to_percent[i]) {
+            duty_code = (uint8_t)i;
+            break;
+        }
+    }
 
-    // Map percentage to duty code (Table 9 in datasheet)
-    if      (duty_percent >= 93) duty_code = 0xE;
-    else if (duty_percent >= 87) duty_code = 0xD;
-    else if (duty_percent >= 80) duty_code = 0xC;
-    else if (duty_percent >= 73) duty_code = 0xB;
-    else if (duty_percent >= 67) duty_code = 0xA;
-    else if (duty_percent >= 60) duty_code = 0x9;
-    else if (duty_percent >= 53) duty_code = 0x8;
-    else if (duty_percent >= 47) duty_code = 0x7;
-    else if (duty_percent >= 40) duty_code = 0x6;
-    else if (duty_percent >= 33) duty_code = 0x5;
-    else if (duty_percent >= 27) duty_code = 0x4;
-    else if (duty_percent >= 20) duty_code = 0x3;
-    else if (duty_percent >= 14) duty_code = 0x2;
-    else if (duty_percent >= 7)  duty_code = 0x1;
-    else                         duty_code = 0x0;
+    /* Set mode: PWM control mode, monitoring on
+     * Bit 0 = monitoring enabled, bits 7:5 = 000 (PWM mode) */
+    uint8_t config1 = 0x01U;
+    if (!fan_write(dev, MAX6663_REG_CONFIG1, config1)) { return false; }
 
-    // Set mode: PWM control mode, monitoring on
-    uint8_t config1 = 0x01; // Bit 0 = monitoring enabled, bits 7:5 = 000 (PWM mode)
-    if (!fan_write(dev, MAX6663_REG_CONFIG1, config1)) return false;
-
-    // Write duty cycle
     return fan_write(dev, MAX6663_REG_PWM_CONFIG, duty_code);
 }
 
 uint8_t FAN_GetPWMDuty(FAN_Driver *dev) {
     uint8_t reg;
-    if (!fan_read(dev, MAX6663_REG_PWM_CONFIG, &reg)) return -1;
-
-    switch (reg & 0x0F) {
-        case 0x0: return 0;
-        case 0x1: return 7;
-        case 0x2: return 14;
-        case 0x3: return 20;
-        case 0x4: return 27;
-        case 0x5: return 33;
-        case 0x6: return 40;
-        case 0x7: return 47;
-        case 0x8: return 53;
-        case 0x9: return 60;
-        case 0xA: return 67;
-        case 0xB: return 73;
-        case 0xC: return 80;
-        case 0xD: return 87;
-        case 0xE: return 93;
-        case 0xF: return 100;
-        default: return 0;
-    }
+    if (!fan_read(dev, MAX6663_REG_PWM_CONFIG, &reg)) { return (uint8_t)-1; }
+    return pwm_code_to_percent[reg & 0x0Fu];
 }
 
 int8_t FAN_ReadLocalTemp(FAN_Driver *dev) {

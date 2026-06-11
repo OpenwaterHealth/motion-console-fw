@@ -70,10 +70,10 @@ void MAX31875_Write_Reg(uint16_t DevAddress, uint8_t reg, uint8_t *dataW, uint8_
 void MAX31875_Read_Reg(uint16_t DevAddress, uint8_t reg, uint8_t *dataR, uint8_t size);
 
 /* Init Function (MAX31875_Init)*/
-void MAX31875_Init(MAX31875_Init_t *tempInitDef);
+void MAX31875_Init(const MAX31875_Init_t *tempInitDef);
 
 /* Get Temperature (MAX31875_Get_Temp)*/
-float MAX31875_Get_Temp(MAX31875_Init_t *tempInitDef);
+float MAX31875_Get_Temp(const MAX31875_Init_t *tempInitDef);
 
 float MAX31875_ReadTemperature(uint8_t address);
 
