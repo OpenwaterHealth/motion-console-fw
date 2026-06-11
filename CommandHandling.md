@@ -140,9 +140,13 @@ Examples include:
 | `OW_CTRL_TEC_STATUS` | Read TEC controller status and faults   |
 | `OW_CTRL_BOARDID`    | Read board identification information   |
 | `OW_CTRL_PDUMON`     | Read power distribution monitoring data |
-| `OW_CTRL_GET_PDC_BUFFER` | Drain up to N per-frame PDC samples from the SRAM ring buffer. Request payload: 1 byte = max_samples (1..64). Response: 2-byte LE drop counter + 1-byte sample count + N × 7-byte packed `{u32 frame_idx, u16 pdc_raw, u8 flags}`. `flags` bit 0 = `dark_slot`. |
+| `OW_CTRL_GET_PDC_BUFFER` | Drain up to N per-frame PDC samples from the SRAM ring buffer. Request payload: 1 byte = max_samples (1..64). Response: 2-byte LE drop counter + 1-byte sample count + N × 7-byte packed `{u32 frame_idx, u16 pdc_raw, u8 flags}`. `flags` bit 0 = `dark_slot`, bit 1 = `demod_slot`. |
+| `OW_CTRL_SET_DEMOD` (0x29) | Configure demod-frame interleaving (Seed FPGA DDS modulation). JSON payload, all fields optional (absent fields keep their value): `DemodPulseInterval` (every Nth laser cycle is a demod frame, 0 = disabled), `ModulationFrequencyWord` (raw 32-bit DDS frequency word, Seed regs 0x0A–0x0D), `ModulationPhaseWord` (raw 12-bit DDS phase word, Seed regs 0x00–0x01). When a frequency/phase word is supplied the firmware writes it and strobes Seed DYNAMIC CONTROL D[0] (reg 0x22) so the FPGA loads it into the modulation device. Response: current demod config JSON. |
+| `OW_CTRL_GET_DEMOD` (0x2A) | Read current demod configuration (JSON, same fields as `SET_DEMOD`). |
 
 Each command defines its own payload format and response payload.
+
+**Demod frames:** while the trigger is running and `DemodPulseInterval > 0`, the firmware turns Seed FPGA modulation on (STATIC CONTROL D[0], reg 0x20) after the laser pulse preceding each demod cycle and off again after the demod pulse completes, so every Nth laser-on cycle is a demodulated pulse. Dark frames take precedence on collision, and the initial `NUM_DARK_FRAMES_AT_START` startup frames are never demod frames. Modulation is forced off at trigger start/stop. Converting a modulation frequency in Hz (or phase in radians) to the raw register word is host-side responsibility — the formulas are in the DDS data sheet and the Unified Board FPGA Memory Map (700-00010).
 
 ---
 

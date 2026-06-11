@@ -11,10 +11,11 @@
 typedef struct __attribute__((packed)) {
     uint32_t frame_idx;
     uint16_t pdc_raw;
-    uint8_t  flags;   /* bit 0 = dark_slot */
+    uint8_t  flags;   /* bit 0 = dark_slot, bit 1 = demod_slot */
 } pdc_sample_t;
 
-#define PDC_FLAG_DARK_SLOT (1u << 0)
+#define PDC_FLAG_DARK_SLOT  (1u << 0)
+#define PDC_FLAG_DEMOD_SLOT (1u << 1)
 
 void     pdc_buffer_reset(void);
 bool     pdc_buffer_push(const pdc_sample_t *sample);  /* drop-oldest on overflow, returns true if a drop occurred */

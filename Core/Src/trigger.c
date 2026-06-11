@@ -7,6 +7,7 @@
 
 #include "main.h"
 #include "trigger.h"
+#include "demod.h"
 #include "usb_events.h"
 #include "odometer.h"
 #include <stdio.h>
@@ -41,6 +42,7 @@ static volatile bool s_prev_slot_is_dark    = true;
 typedef struct {
     uint32_t frame_idx;
     bool     dark_slot;
+    bool     demod_slot;
 } pdc_pending_t;
 static volatile pdc_pending_t s_pending_buf[PDC_PENDING_CAPACITY];
 static volatile uint16_t s_pending_head     = 0;  /* write idx (ISR) */
@@ -282,6 +284,9 @@ HAL_StatusTypeDef Trigger_Start() {
 	/* Update laser odometer at scan start */
 	Odometer_Scan_Start();
 
+	/* Reset demod interleave state; forces modulation OFF if configured */
+	Demod_OnTriggerStart();
+
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
 	__HAL_TIM_CLEAR_FLAG(&LASER_TIMER, TIM_FLAG_UPDATE);
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
@@ -310,6 +315,9 @@ HAL_StatusTypeDef Trigger_Stop() {
 
 	/* Update laser odometer at scan finish */
 	Odometer_Scan_Finish();
+
+	/* Request modulation OFF (serviced by Demod_Tick from the main loop) */
+	Demod_OnTriggerStop();
 
     return HAL_OK;
 }
@@ -372,6 +380,16 @@ void Trigger_PrintConfig(const Trigger_Config_t *config)
     printf("  TriggerStatus:         %lu\r\n", config->TriggerStatus);
 }
 
+/* Dark-slot formula for laser cycle K. Keep in sync with the preload decision
+ * in FSYNC_PeriodElapsedCallback (which evaluates it with fsync_counter==K). */
+bool Trigger_CycleIsDark(uint32_t cycle)
+{
+    return (cycle < NUM_DARK_FRAMES_AT_START)
+        || (trigger_config.LaserPulseSkipInterval > 0
+            && cycle > 0
+            && (cycle % trigger_config.LaserPulseSkipInterval) == 0);
+}
+
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
     // Disable fsync output when the flag goes high on the last pulse
@@ -428,10 +446,7 @@ void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
      */
     lsync_counter++;
     uint32_t cycle = lsync_counter - 1;
-    bool dark = (cycle < NUM_DARK_FRAMES_AT_START)
-             || (trigger_config.LaserPulseSkipInterval > 0
-                 && cycle > 0
-                 && (cycle % trigger_config.LaserPulseSkipInterval) == 0);
+    bool dark = Trigger_CycleIsDark(cycle);
 
     if (s_pending_count == PDC_PENDING_CAPACITY) {
         s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
@@ -440,8 +455,13 @@ void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
     }
     s_pending_buf[s_pending_head].frame_idx = lsync_counter;
     s_pending_buf[s_pending_head].dark_slot = dark;
+    s_pending_buf[s_pending_head].demod_slot = Demod_CycleIsDemod(cycle);
     s_pending_head = (uint16_t)((s_pending_head + 1) % PDC_PENDING_CAPACITY);
     s_pending_count++;
+
+    /* Let the demod scheduler decide the next cycle's modulation state from
+     * the main loop once this cycle's pulse has completed. */
+    Demod_NotifyCycleISR(cycle);
 }
 
 void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -455,12 +475,13 @@ void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
 bool get_current_slot_is_dark(void) { return s_current_slot_is_dark; }
 
-bool consume_pdc_sample_pending(bool *out_dark_slot, uint32_t *out_frame_idx)
+bool consume_pdc_sample_pending(bool *out_dark_slot, bool *out_demod_slot, uint32_t *out_frame_idx)
 {
     __disable_irq();
     bool pending = (s_pending_count > 0);
     if (pending) {
         *out_dark_slot = s_pending_buf[s_pending_tail].dark_slot;
+        *out_demod_slot = s_pending_buf[s_pending_tail].demod_slot;
         *out_frame_idx = s_pending_buf[s_pending_tail].frame_idx;
         s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
         s_pending_count--;

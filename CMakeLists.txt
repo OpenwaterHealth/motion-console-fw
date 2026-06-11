@@ -121,6 +121,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/pdc_buffer.c
     Core/Src/pdc_poll.c
     Core/Src/odometer.c
+    Core/Src/demod.c
 )
 
 # Add include paths

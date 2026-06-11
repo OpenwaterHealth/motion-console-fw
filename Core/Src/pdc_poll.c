@@ -19,6 +19,7 @@
 static uint32_t s_pending_since_tick = 0;
 static bool     s_have_pending = false;
 static bool     s_dark_slot = false;
+static bool     s_demod_slot = false;
 static uint32_t s_frame_idx = 0;
 static uint32_t s_fail_count = 0;
 
@@ -38,10 +39,11 @@ void pdc_poll_tick(void) {
 
     /* Pick up any new pending sample from the LSYNC ISR. */
     if (!s_have_pending) {
-        bool d; uint32_t f;
-        if (consume_pdc_sample_pending(&d, &f)) {
+        bool d; bool m; uint32_t f;
+        if (consume_pdc_sample_pending(&d, &m, &f)) {
             s_have_pending = true;
             s_dark_slot = d;
+            s_demod_slot = m;
             s_frame_idx = f;
             s_pending_since_tick = HAL_GetTick();
         }
@@ -70,7 +72,8 @@ void pdc_poll_tick(void) {
     pdc_sample_t sample = {
         .frame_idx = s_frame_idx,
         .pdc_raw   = (uint16_t)((uint16_t)bytes[0] | ((uint16_t)bytes[1] << 8)),
-        .flags     = (uint8_t)(s_dark_slot ? PDC_FLAG_DARK_SLOT : 0u),
+        .flags     = (uint8_t)((s_dark_slot ? PDC_FLAG_DARK_SLOT : 0u)
+                             | (s_demod_slot ? PDC_FLAG_DEMOD_SLOT : 0u)),
     };
     (void)pdc_buffer_push(&sample);
 }

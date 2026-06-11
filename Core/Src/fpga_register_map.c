@@ -43,6 +43,7 @@ static const FpgaRegisterEntry fpga_register_table[] = {
     { "SEED_MINOR",        { 1, 5, 1, 0x41, 0x14, FPGA_DIR_RD, 1.0f    } },
     { "SEED_MAJOR",        { 1, 5, 1, 0x41, 0x15, FPGA_DIR_RD, 1.0f    } },
     { "SEED_ID",           { 1, 5, 1, 0x41, 0x16, FPGA_DIR_RD, 1.0f    } },
+    { "SEED_DDS_FREQ",     { 1, 5, 4, 0x41, 0x0A, FPGA_DIR_RW, 1.0f    } },
     { "SEED_STATIC_CTRL",  { 1, 5, 2, 0x41, 0x20, FPGA_DIR_RW, 1.0f    } },
     { "SEED_DYNAMIC_CTRL", { 1, 5, 2, 0x41, 0x22, FPGA_DIR_WR, 1.0f    } },
     /* ── Safety EE ───────────────────────────────────────────────────────── */

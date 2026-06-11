@@ -42,6 +42,7 @@
 #include "if_fpga_prog.h"
 #include "motion_config.h"
 #include "fpga_register_map.h"
+#include "demod.h"
 #include "jsmn.h"
 #include "utils.h"
 #include "msg_queue.h"
@@ -596,6 +597,7 @@ int main(void)
     telemetry_poll();
     usb_recovery_task();
     pdc_poll_tick();
+    Demod_Tick();
     Odometer_Update_System();
     HAL_Delay(1);
   }

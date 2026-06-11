@@ -114,6 +114,8 @@ typedef enum {
 	OW_CTRL_GET_SYSTEM_ODO = 0x26,
 	OW_CTRL_GET_LASER_ODO = 0x27,
 	OW_CTRL_RESET_ODO = 0x28,
+	OW_CTRL_SET_DEMOD = 0x29,
+	OW_CTRL_GET_DEMOD = 0x2A,
 } MotionControllerCommands;
 
 typedef enum {

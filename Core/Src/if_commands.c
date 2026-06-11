@@ -12,6 +12,7 @@
 #include "utils.h"
 #include "tca9548a.h"
 #include "trigger.h"
+#include "demod.h"
 #include "fan_driver.h"
 #include "ads7828.h"
 #include "ad5761r.h"
@@ -123,6 +124,7 @@ static float tecadc_last_volts[4];
 static uint16_t tecadc_last_raw[4];
 
 static char retTriggerJson[0xFF];
+static char retDemodJson[0xFF];
 static float tec_setpoint = 0.0;
 static float temp_val = 0;
 
@@ -563,6 +565,46 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->packet_type = OW_ERROR;
         }
     } break;
+    case OW_CTRL_SET_DEMOD:
+        uartResp->command = OW_CTRL_SET_DEMOD;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        uartResp->data_len = 0;
+
+        if (Demod_SetConfigFromJSON((char *)cmd->data, cmd->data_len) != HAL_OK)
+        {
+            uartResp->packet_type = OW_ERROR;
+        }
+        else
+        {
+            memset(retDemodJson, 0, sizeof(retDemodJson));
+            if (Demod_GetConfigToJSON(retDemodJson, sizeof(retDemodJson)) != HAL_OK)
+            {
+                uartResp->packet_type = OW_ERROR;
+            }
+            else
+            {
+                uartResp->data_len = strlen(retDemodJson);
+                uartResp->data = (uint8_t *)retDemodJson;
+            }
+        }
+        break;
+    case OW_CTRL_GET_DEMOD:
+        uartResp->command = OW_CTRL_GET_DEMOD;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        uartResp->data_len = 0;
+        memset(retDemodJson, 0, sizeof(retDemodJson));
+        if (Demod_GetConfigToJSON(retDemodJson, sizeof(retDemodJson)) != HAL_OK)
+        {
+            uartResp->packet_type = OW_ERROR;
+        }
+        else
+        {
+            uartResp->data_len = strlen(retDemodJson);
+            uartResp->data = (uint8_t *)retDemodJson;
+        }
+        break;
     default:
         uartResp->data_len = 0;
         uartResp->packet_type = OW_UNKNOWN;
