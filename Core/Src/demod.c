@@ -51,6 +51,13 @@ static bool s_mod_is_on = false;          /* last state successfully written */
 static volatile bool s_force_off = false; /* one-shot OFF request, serviced in Demod_Tick */
 static uint32_t s_fail_count = 0;
 
+/* Cap forced-OFF retries so an unreachable Seed FPGA (e.g. laser board
+ * unpowered after a stop) doesn't hammer the I2C bus every main-loop tick.
+ * An unreachable device isn't modulating anyway, and the next trigger start
+ * re-arms a fresh forced OFF. */
+#define DEMOD_FORCE_OFF_MAX_ATTEMPTS 8u
+static uint32_t s_force_off_attempts = 0;
+
 static int8_t seed_write(uint8_t reg, const uint8_t *data, uint8_t len)
 {
     return TCA9548A_Write_Data(SEED_MUX_INDEX, SEED_CHANNEL, SEED_I2C_ADDR,
@@ -220,11 +227,15 @@ void Demod_Tick(void)
         if (write_modulation_state(false) == TCA9548A_OK) {
             s_mod_is_on = false;
             s_force_off = false;
+            s_force_off_attempts = 0;
         } else {
             s_fail_count++;
-            if ((s_fail_count & 0x3Fu) == 1) {
-                printf("demod: modulation OFF write failed (count=%lu)\r\n",
-                       (unsigned long)s_fail_count);
+            s_force_off_attempts++;
+            if (s_force_off_attempts >= DEMOD_FORCE_OFF_MAX_ATTEMPTS) {
+                s_force_off = false;
+                s_force_off_attempts = 0;
+                printf("demod: forced OFF abandoned after %u attempts\r\n",
+                       (unsigned int)DEMOD_FORCE_OFF_MAX_ATTEMPTS);
             }
         }
         return;
@@ -282,6 +293,7 @@ void Demod_OnTriggerStart(void)
     s_mod_is_on = false;
     if (demod_config.demodPulseInterval > 0) {
         s_force_off = true;
+        s_force_off_attempts = 0;
     }
 }
 
