@@ -28,6 +28,7 @@
 #include "usbd_cdc_if.h"
 #include "uart_comms.h"
 #include "trigger.h"
+#include "pdc_poll.h"
 #include "led_driver.h"
 #include "tca9548a.h"
 #include "pca9535.h"
@@ -44,6 +45,7 @@
 #include "jsmn.h"
 #include "utils.h"
 #include "msg_queue.h"
+#include "odometer.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -562,6 +564,12 @@ int main(void)
   motion_cfg_get();
   motion_cfg_apply_settings();
 
+  // Initialize odometers
+  printf("Initialize odometers\r\n");
+  if(Odometer_Init() != HAL_OK){
+      printf("Failed to initialize odometers\r\n");
+  }
+
   HAL_Delay(100);
 
   // Enable USB HUB
@@ -569,6 +577,7 @@ int main(void)
   HAL_Delay(100);
 
   comms_init();
+  pdc_poll_init();
   /* Start TIM4 interrupt for telemetry polling (250 ms) */
   HAL_TIM_Base_Start_IT(&htim4);
 
@@ -584,6 +593,8 @@ int main(void)
     comms_process();
     telemetry_poll();
     usb_recovery_task();
+    pdc_poll_tick();
+    Odometer_Update_System();
     HAL_Delay(1);
   }
   /* USER CODE END 3 */
@@ -1741,6 +1752,9 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   }
   if (htim->Instance == FSYNC_TIMER.Instance) {
     FSYNC_PeriodElapsedCallback(htim);
+  }
+  if (htim->Instance == LASER_TIMER.Instance) {
+    LSYNC_PeriodElapsedCallback(htim);
   }
 
   if (htim->Instance == TIM12) {

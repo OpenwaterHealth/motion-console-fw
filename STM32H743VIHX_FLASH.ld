@@ -43,8 +43,12 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Specify the memory areas */
 MEMORY
 {
-  /* Reserve the last 128KB sector (Bank2 Sector7 @ 0x081E0000) for user config. */
-  FLASH (rx)     : ORIGIN = 0x08000000, LENGTH = 1920K
+  /* Reserve the last two 128KB sectors of Bank 2 for persistent data:
+   *   Sector 7 (@ 0x081E0000) — motion_config / calibration JSON
+   *   Sector 6 (@ 0x081C0000) — odometer (system uptime + laser pulses)
+   * Each persists via full-sector erase, so they cannot co-tenant a sector.
+   * Trimming code to 1792 KB still leaves >10x headroom for current build. */
+  FLASH (rx)     : ORIGIN = 0x08000000, LENGTH = 1792K
   DTCMRAM (xrw)  : ORIGIN = 0x20000000, LENGTH = 128K
   RAM_D1 (xrw)   : ORIGIN = 0x24000000, LENGTH = 512K
   RAM_D2 (xrw)   : ORIGIN = 0x30000000, LENGTH = 288K

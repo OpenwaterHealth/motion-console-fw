@@ -8,6 +8,7 @@
 #include "main.h"
 #include "trigger.h"
 #include "usb_events.h"
+#include "odometer.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -22,6 +23,30 @@ volatile uint8_t _safety_trigger_interlock = 0;
 
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
+
+/* s_current_slot_is_dark is the decision the most recent FSYNC ISR made — it
+ * controls the LASER_TIMER preload that becomes shadow at the next UPDATE
+ * event, i.e. it's the slot for the cycle that runs *after* the cycle that's
+ * about to fire CC1. The cycle that fires CC1 right now uses the shadow that
+ * was loaded by the *previous* FSYNC ISR's preload write. So LSYNC must read
+ * the previous decision, not the current one. We initialize s_prev to true to
+ * match Trigger_Start's direct shadow write of long_lsync_arr. */
+static volatile bool s_current_slot_is_dark = true;
+static volatile bool s_prev_slot_is_dark    = true;
+
+/* SPSC queue of pending PDC samples between the LSYNC ISR (producer) and the
+ * main-loop pdc_poll_tick (consumer). Sized for ~200 ms of slack at 40 Hz so
+ * brief main-loop stalls (USB bursts, comms handling) don't lose frames. */
+#define PDC_PENDING_CAPACITY 32
+typedef struct {
+    uint32_t frame_idx;
+    bool     dark_slot;
+} pdc_pending_t;
+static volatile pdc_pending_t s_pending_buf[PDC_PENDING_CAPACITY];
+static volatile uint16_t s_pending_head     = 0;  /* write idx (ISR) */
+static volatile uint16_t s_pending_tail     = 0;  /* read idx (main) */
+static volatile uint16_t s_pending_count    = 0;
+static volatile uint16_t s_pending_overwrites = 0;  /* drops-on-full since last consume */
 
 uint32_t short_lsync_arr = 0;
 uint32_t long_lsync_arr = 0;
@@ -246,8 +271,20 @@ HAL_StatusTypeDef Trigger_Start() {
 
 	lsync_counter = 1;
 	fsync_counter = 1;
+	/* Match initial Trigger_SetConfig direct shadow write of long_lsync_arr. */
+	s_current_slot_is_dark = true;
+	s_prev_slot_is_dark = true;
+	s_pending_head = 0;
+	s_pending_tail = 0;
+	s_pending_count = 0;
+	s_pending_overwrites = 0;
+
+	/* Update laser odometer at scan start */
+	Odometer_Scan_Start();
 
 	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_CC1);
+	__HAL_TIM_CLEAR_FLAG(&LASER_TIMER, TIM_FLAG_UPDATE);
+	__HAL_TIM_ENABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
 	if(HAL_TIM_OC_Start_IT(&FSYNC_TIMER, FSYNC_TIMER_CHAN) != HAL_OK) {
         return HAL_ERROR; // Handle error
 	}
@@ -266,9 +303,13 @@ HAL_StatusTypeDef Trigger_Stop() {
     }
 
     __HAL_TIM_DISABLE(&LASER_TIMER);
+    __HAL_TIM_DISABLE_IT(&LASER_TIMER, TIM_IT_UPDATE);
 
 	HAL_GPIO_WritePin(enSyncOUT_GPIO_Port, enSyncOUT_Pin, GPIO_PIN_SET); // disable fsync output
 	HAL_GPIO_WritePin(nTRIG_GPIO_Port, nTRIG_Pin, GPIO_PIN_SET); // disable TA Trigger to fpga
+
+	/* Update laser odometer at scan finish */
+	Odometer_Scan_Finish();
 
     return HAL_OK;
 }
@@ -344,26 +385,95 @@ void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     fsync_counter++;
     if (trigger_config.LaserPulseSkipInterval > 0) {
-
-		if ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0 || (fsync_counter < NUM_DARK_FRAMES_AT_START )) {
-            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr); // next period will be longer by 1 ms
-            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
-            // printf("Long LSYNC\r\n");
+        bool dark = ((fsync_counter % trigger_config.LaserPulseSkipInterval) == 0)
+                    || (fsync_counter < NUM_DARK_FRAMES_AT_START);
+        if (dark) {
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, long_lsync_arr);
+            __HAL_TIM_SET_COMPARE  (&LASER_TIMER, TIM_CHANNEL_1, long_lsync_ccr1);
         } else {
-            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr); // next period will be longer by 1 ms
-            __HAL_TIM_SET_COMPARE (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
-            // printf("Short LSYNC\r\n");
+            __HAL_TIM_SET_AUTORELOAD(&LASER_TIMER, short_lsync_arr);
+            __HAL_TIM_SET_COMPARE  (&LASER_TIMER, TIM_CHANNEL_1, short_lsync_ccr1);
         }
+        /* Save the slot decision that controls the cycle about to fire — i.e.
+         * the previous ISR's decision — before overwriting with this ISR's. */
+        s_prev_slot_is_dark = s_current_slot_is_dark;
+        s_current_slot_is_dark = dark;
     }
 }
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim)
 {
+    /* Fires on laser-pulse rising edge (CC1 compare match).  Increment the
+     * frame counter and enqueue (frame_idx, dark_slot) for pdc_poll_tick to
+     * consume from the main loop.  Drop-oldest on overflow so the freshest
+     * samples win; the overwrite count propagates to the ring buffer's drop
+     * counter via consume_pdc_pending_overwrites().
+     *
+     * We enqueue at the rising edge rather than the falling edge because
+     * STM32 TIM_UPDATE events get coalesced when interrupts are delayed.
+     *
+     * dark_slot is computed locally from lsync_counter rather than read from
+     * s_current_slot_is_dark / s_prev_slot_is_dark — neither was reliable
+     * empirically, because FSYNC ISR for frame N can run either *before* or
+     * *after* LSYNC ISR for cycle N depending on what other ISRs the CPU is
+     * busy with. By computing the slot from lsync_counter directly we get a
+     * deterministic answer that exactly matches what the LASER_TIMER shadow
+     * was during this cycle (which is set by ISR N-1's preload decision = the
+     * decision based on fsync_counter post-incremented to N).
+     *
+     * Cycle K's actual slot:
+     *   cycle 1: initial long (set by Trigger_SetConfig) -> dark
+     *   cycle K>=2: ISR(K-1)'s preload decision, which uses fsync_counter==K:
+     *     dark iff (K < NUM_DARK_FRAMES_AT_START) || (K % skip == 0)
+     * Both branches reduce to the same formula on K = lsync_counter - 1.
+     */
     lsync_counter++;
+    uint32_t cycle = lsync_counter - 1;
+    bool dark = (cycle < NUM_DARK_FRAMES_AT_START)
+             || (trigger_config.LaserPulseSkipInterval > 0
+                 && cycle > 0
+                 && (cycle % trigger_config.LaserPulseSkipInterval) == 0);
 
-#if 0
-    if (lsync_counter % 200 == 0) {
-    	printf("LSYNC tick: %lu\r\n", lsync_counter);
+    if (s_pending_count == PDC_PENDING_CAPACITY) {
+        s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
+        s_pending_count--;
+        s_pending_overwrites++;
     }
-#endif
+    s_pending_buf[s_pending_head].frame_idx = lsync_counter;
+    s_pending_buf[s_pending_head].dark_slot = dark;
+    s_pending_head = (uint16_t)((s_pending_head + 1) % PDC_PENDING_CAPACITY);
+    s_pending_count++;
+}
 
+void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    /* No-op. PDC sample enqueue moved to LSYNC_DelayElapsedCallback (rising
+     * edge) to avoid TIM_UPDATE coalescing. Kept declared so the dispatch in
+     * main.c still compiles; the dispatch could be removed once we're sure
+     * the rising-edge approach is stable. */
+    (void)htim;
+}
+
+bool get_current_slot_is_dark(void) { return s_current_slot_is_dark; }
+
+bool consume_pdc_sample_pending(bool *out_dark_slot, uint32_t *out_frame_idx)
+{
+    __disable_irq();
+    bool pending = (s_pending_count > 0);
+    if (pending) {
+        *out_dark_slot = s_pending_buf[s_pending_tail].dark_slot;
+        *out_frame_idx = s_pending_buf[s_pending_tail].frame_idx;
+        s_pending_tail = (uint16_t)((s_pending_tail + 1) % PDC_PENDING_CAPACITY);
+        s_pending_count--;
+    }
+    __enable_irq();
+    return pending;
+}
+
+uint16_t consume_pdc_pending_overwrites(void)
+{
+    __disable_irq();
+    uint16_t n = s_pending_overwrites;
+    s_pending_overwrites = 0;
+    __enable_irq();
+    return n;
 }

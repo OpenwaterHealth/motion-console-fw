@@ -35,8 +35,14 @@
 #define ADDR_FLASH_SECTOR_6_BANK2     ((uint32_t)0x081C0000) /* Base @ of Sector 6, 128 Kbytes */
 #define ADDR_FLASH_SECTOR_7_BANK2     ((uint32_t)0x081E0000) /* Base @ of Sector 7, 128 Kbytes */
 
-#define ADDR_FLASH_END_ADDRESS     ((uint32_t)0x08200000) 
-#define FLASH_USER_START_ADDR ADDR_FLASH_SECTOR_7_BANK2
+#define ADDR_FLASH_END_ADDRESS     ((uint32_t)0x08200000)
+
+/* Reserved persistent-data sectors. Each persists via full-sector erase
+ * (the STM32H7 flash sector is 128 KB and that is the minimum erase
+ * granularity), so two distinct tenants need two distinct sectors. The
+ * linker script reserves both by capping FLASH at 1792 KB. */
+#define FLASH_USER_START_ADDR     ADDR_FLASH_SECTOR_7_BANK2  /* motion_config / calibration */
+#define FLASH_ODOMETER_START_ADDR ADDR_FLASH_SECTOR_6_BANK2  /* system + laser odometer */
 
 #ifdef __cplusplus
 }

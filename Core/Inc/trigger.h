@@ -45,6 +45,10 @@ void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 void LSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
 
 void FSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+void LSYNC_PeriodElapsedCallback(TIM_HandleTypeDef *htim);
+bool get_current_slot_is_dark(void);
+bool consume_pdc_sample_pending(bool *out_dark_slot, uint32_t *out_frame_idx);
+uint16_t consume_pdc_pending_overwrites(void);
 
 extern Trigger_Config_t trigger_config;
 

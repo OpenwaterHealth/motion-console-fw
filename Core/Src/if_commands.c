@@ -20,6 +20,8 @@
 #include "led_driver.h"
 #include "motion_config.h"
 #include "msg_queue.h"
+#include "pdc_buffer.h"
+#include "odometer.h"
 
 #include <string.h>
 
@@ -114,6 +116,8 @@ static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
 static uint32_t last_lsync_count = 0;
+static uint32_t last_system_odo = 0;
+static uint32_t last_laser_odo = 0;
 
 static float tecadc_last_volts[4];
 static uint16_t tecadc_last_raw[4];
@@ -497,6 +501,68 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->data_len = (uint16_t)sizeof(pdu_frame);
         uartResp->data = pdu_frame.bytes;
         break;
+    case OW_CTRL_GET_PDC_BUFFER: {
+        uartResp->command = OW_CTRL_GET_PDC_BUFFER;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+
+        /* Request payload: 1 byte = max_samples (clamped to 64). */
+        uint8_t requested = (cmd->data_len >= 1) ? cmd->data[0] : 64;
+        if (requested == 0 || requested > 64) requested = 64;
+
+        /* Response layout: [dropped:u16 LE][count:u8][count * sizeof(pdc_sample_t)] */
+        static pdc_sample_t drained[64];
+        size_t n = pdc_buffer_drain(drained, requested);
+        uint16_t dropped = pdc_buffer_dropped_since_last_drain();
+
+        static uint8_t resp[3 + 64 * sizeof(pdc_sample_t)];
+        resp[0] = (uint8_t)(dropped & 0xFF);
+        resp[1] = (uint8_t)((dropped >> 8) & 0xFF);
+        resp[2] = (uint8_t)n;
+        memcpy(&resp[3], drained, n * sizeof(pdc_sample_t));
+
+        uartResp->data_len = (uint16_t)(3 + n * sizeof(pdc_sample_t));
+        uartResp->data = resp;
+    } break;
+    case OW_CTRL_GET_SYSTEM_ODO:
+        uartResp->command = OW_CTRL_GET_SYSTEM_ODO;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        uartResp->data_len = 4;
+        last_system_odo = Odometer_Get_System_Minutes();
+        uartResp->data = (uint8_t *)&last_system_odo;
+        break;
+    case OW_CTRL_GET_LASER_ODO:
+        uartResp->command = OW_CTRL_GET_LASER_ODO;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        uartResp->data_len = 4;
+        last_laser_odo = Odometer_Get_Laser_Pulses();
+        uartResp->data = (uint8_t *)&last_laser_odo;
+        break;
+    case OW_CTRL_RESET_ODO: {
+        uartResp->command = OW_CTRL_RESET_ODO;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        /* Request payload: 1 byte = target (0=system, 1=laser, 2=both).
+         * No payload defaults to "both" for caller convenience. */
+        OdoResetTarget target = ODO_RESET_BOTH;
+        if (cmd->data_len >= 1) {
+            if (cmd->data[0] > (uint8_t)ODO_RESET_BOTH) {
+                uartResp->data_len = 0;
+                uartResp->packet_type = OW_ERROR;
+                break;
+            }
+            target = (OdoResetTarget)cmd->data[0];
+        }
+        static uint8_t reset_resp;
+        reset_resp = (Odometer_Reset(target) == HAL_OK) ? 0 : 1;
+        uartResp->data_len = 1;
+        uartResp->data = &reset_resp;
+        if (reset_resp != 0) {
+            uartResp->packet_type = OW_ERROR;
+        }
+    } break;
     default:
         uartResp->data_len = 0;
         uartResp->packet_type = OW_UNKNOWN;
