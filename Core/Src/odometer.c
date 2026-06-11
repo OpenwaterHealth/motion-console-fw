@@ -29,7 +29,7 @@ static uint32_t odo_crc32(const void *data, size_t len)
     for (size_t i = 0; i < len; ++i) {
         crc ^= p[i];
         for (int b = 0; b < 8; ++b) {
-            uint32_t mask = -(int32_t)(crc & 1u);
+            uint32_t mask = 0u - (crc & 1u);
             crc = (crc >> 1) ^ (0xEDB88320u & mask);
         }
     }
@@ -265,7 +265,7 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void)
 
     laser_odo.total_pulses += scan_pulses;
     printf("Scan finished, pulses this scan: %lu, total: %lu\r\n",
-           scan_pulses, laser_odo.total_pulses);
+           (unsigned long)scan_pulses, (unsigned long)laser_odo.total_pulses);
 
     HAL_StatusTypeDef status = Odometer_Persist_Both();
     if (status != HAL_OK) {
