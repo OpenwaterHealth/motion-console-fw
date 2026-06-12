@@ -138,6 +138,50 @@ FPGA logic flaw) but its fix is gated on physical bench presence.
 4. FPGA follow-ups for Henry: clamp-not-drop on the gain gate, scale-match
    the comparison, consider mainlining the 0x17–0x19 debug counters.
 
+## Addendum 2 — round 6 (weekend remote session, user-authorized +20 mA)
+
+With explicit authorization for up to 20 mA extra seed current, the gain
+gate (`SEED_DDS_CL`) was raised by exactly that increment in its own scale
+(864 → 1111), the previously-unreachable amplitude range was measured, and
+the bench restored (CL = 864, gain = 0) afterward. Peak modulation used:
+≈ ±12 mA (PDC −8.8 %) — within budget. Key results, all PDC-verified
+(source-side photodiode, speckle-immune):
+
+1. **Modulation effectiveness peaks at gain word ≈ 860 and collapses
+   sharply between 860 and 880** (PDC −8.8 % → −2.7 %), with no status
+   flags. The old production CL value (864) evidently sits just below an
+   analog clip/foldback threshold — it was calibrated, not arbitrary. Max
+   usable amplitude on this hardware = word ~860.
+2. **The modulation chain is bandwidth-limited.** Identical word 860:
+   6.1 kHz → PDC −8.8 %; 1.5625 MHz → −0.8 %. The current driver rolls the
+   amplitude off ~10× by 1.5625 MHz (V-to-I loop bandwidth likely tens of
+   kHz). The DDS frequency range the washout concept assumed is not
+   deliverable by the analog stage.
+3. **No contrast washout even at full deliverable strength.** At 6.1 kHz,
+   word 860 (~9 % power modulation, 3 triangle sweeps per pulse), speckle
+   contrast is unchanged (K 0.5421 vs 0.5385 reference; the 1.5625 MHz
+   acceptance run with verified per-pulse gating was equally null:
+   armed 0.5361 vs disarmed 0.5390, interleave per-phase flat to 0.1 %).
+   The wavelength excursion at deliverable depth is insufficient for this
+   phantom — or the modulation is predominantly AM rather than chirp.
+
+### Conclusion
+
+Every digital layer of the demod-frame feature is verified working:
+console firmware scheduling, SDK, FPGA per-pulse gating (counter-proven),
+DDS configuration. **The physical effect the feature exists for — contrast
+collapse with unchanged intensity — does not occur on this hardware**, for
+two measured analog reasons: (a) modulation bandwidth ≪ required MHz
+rates, and (b) deliverable modulation depth capped at ~±12 mA by an
+analog limiter, producing ~9 % AM and no measurable speckle decorrelation.
+Mean intensity is also *not* preserved at usable depth (−8.8 % PDC), so
+both halves of the original intent fail as built.
+
+Decision needed (Brad/Henry): re-spec the modulation path (driver
+bandwidth + depth + intended chirp), or rethink the demod-frame concept.
+Monday scope work can confirm the foldback mechanism and driver BW
+directly; the Saleae plan stands.
+
 ## Artifacts
 
 Per-run CSVs, metadata, and reports:
