@@ -90,15 +90,20 @@ static HAL_StatusTypeDef apply_dds_config(bool write_freq, bool write_phase)
 
     if (write_freq) {
         const uint32_t f = demod_config.modFrequencyWord;
-        const uint8_t buf[4] = {
-            (uint8_t)(f & 0xFFu),
-            (uint8_t)((f >> 8) & 0xFFu),
-            (uint8_t)((f >> 16) & 0xFFu),
-            (uint8_t)((f >> 24) & 0xFFu),
-        };
-        if (seed_write(SEED_REG_MOD_FREQ, buf, 4) != TCA9548A_OK) {
-            printf("demod: frequency write failed\r\n");
-            return HAL_ERROR;
+        /* Seed FPGA rev 1.1.0 I2C write-path bug (registers.v:183): a write
+         * to reg 0x0C lands in modulate_frequency_temp[23:0], zeroing bits
+         * [23:8]. Write one byte at a time with 0x0C FIRST so the later
+         * bytes repair the damage; on affected images bits [23:16] are
+         * stuck at zero, so use frequency words with [23:16] == 0. Fixed
+         * images are order-insensitive. */
+        static const uint8_t freq_byte_order[4] = { 2u, 0u, 1u, 3u };
+        for (unsigned k = 0; k < 4u; k++) {
+            const uint8_t off = freq_byte_order[k];
+            const uint8_t b = (uint8_t)((f >> (8u * off)) & 0xFFu);
+            if (seed_write((uint8_t)(SEED_REG_MOD_FREQ + off), &b, 1) != TCA9548A_OK) {
+                printf("demod: frequency write failed\r\n");
+                return HAL_ERROR;
+            }
         }
         wrote = true;
     }
