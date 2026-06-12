@@ -99,6 +99,45 @@ summing into the OPA27 V-to-I stage (schematic sheet 20). Needs a scope.
    assumes a wavelength sweep of meaningful depth; with the current
    analog chain the achievable sweep appears ~2 orders of magnitude short.
 
+## Addendum — bench rounds 2–5 (2026-06-12, same day)
+
+Root cause 1 is **fixed and verified**; root cause 2 is **explained** (a third
+FPGA logic flaw) but its fix is gated on physical bench presence.
+
+- **Pin-99 + active-low trigger inversion verified working** (seed-fpga PR #3,
+  image rev 1.2.0/1.3.0): debug counters added at I2C regs 0x17–0x19 read,
+  with the trigger at 40 Hz: disarmed 87 edges / 0 starts / 87 stops per 2 s;
+  armed 88/88/88. Per-pulse gating + MCU arm scheduling fully functional.
+  (Round-3 confusion was a stale FPGA build; images now carry unique minor
+  revisions so `sanity` fingerprints the chip.)
+- **The "amplitude saturation" was an artifact of a third FPGA bug**:
+  `dds_gain_control.v` silently drops gain writes unless
+  `gain_word < dds_current_limit_reg` (raw words, mismatched scales; bench
+  limit = 864). The laser-params pass writes gain 0 first, so every run that
+  requested word ≥ 864 actually ran with the modulation DAC at **zero**. All
+  earlier "saturation" data points above 864 were DAC=0 runs.
+- True accepted-range transfer (gated, slow-mod mean-shift probe, words
+  0→850): weak monotonic amplitude scaling (+0.6 % optical mean at 850)
+  plus a small DAC-independent feedthrough floor. The curve above word 863
+  has never been measured.
+- Extension past the gate requires raising DDS_CL (or fixing the FPGA
+  gate) — **deferred to Monday with a human at the bench**; loosening a
+  limit register on a live laser unattended was deliberately not done.
+
+### Monday runbook
+
+1. Bench present: temporarily write `SEED_DDS_CL` = 20000 (reg 0x06; gate
+   comparison only — ADC monitor + safety FPGAs unaffected), then re-run the
+   slow-mod amplitude sweep upward (2000 / 8000 / 16000), watching Seed
+   STATUS bit 0 and camera mean between steps. Restore CL = 864 after.
+2. If the mean-shift keeps scaling: compute the word for ~30–60 mA effective
+   depth, re-run the interleave at 1.5625 MHz, and look for the contrast
+   collapse — the original feature acceptance test.
+3. Saleae (optional now): only needed if the extended sweep still
+   under-delivers — probe AD5689R VOUTA staircase, AD633 W, CW_MODULATE.
+4. FPGA follow-ups for Henry: clamp-not-drop on the gain gate, scale-match
+   the comparison, consider mainlining the 0x17–0x19 debug counters.
+
 ## Artifacts
 
 Per-run CSVs, metadata, and reports:
