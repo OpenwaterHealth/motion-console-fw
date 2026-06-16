@@ -11,6 +11,7 @@
 #include "if_fpga_prog.h"
 #include "utils.h"
 #include "tca9548a.h"
+#include "console_i2c_health.h"
 #include "trigger.h"
 #include "fan_driver.h"
 #include "ads7828.h"
@@ -161,6 +162,16 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
                 uartResp->data = i2c_list;
             }
         }
+        break;
+    case OW_CTRL_I2C_STATUS:
+        uartResp->command = OW_CTRL_I2C_STATUS;
+        /* reserved==1 -> re-run the (passive) scan live before returning. */
+        if (cmd->reserved == 1)
+        {
+            console_i2c_health_scan();
+        }
+        uartResp->data_len = sizeof(console_i2c_health_t);
+        uartResp->data = (uint8_t *)console_i2c_health_get();
         break;
     case OW_CTRL_SET_IND:
         uartResp->command = OW_CTRL_SET_IND;
