@@ -3,49 +3,52 @@
  *
  *  Created on: Apr 29, 2026
  *      Author: Claude
+ *
+ * System + laser odometers, persisted to the external 24AA025E48 I2C EEPROM
+ * (U49) instead of internal flash. The EEPROM endures ~1,000,000 write cycles
+ * per byte (vs ~10,000 for an STM32H7 flash sector) and is written a 16-byte
+ * page at a time with no bulk erase, so we can persist far more often. A simple
+ * wear-levelling ring spreads writes across ODO_RING_SLOTS slots, multiplying
+ * device life by that factor again.
  */
 
 #ifndef INC_ODOMETER_H_
 #define INC_ODOMETER_H_
 
 #include "stm32h7xx_hal.h"
-#include "memory_map.h"
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Flash memory addresses for odometer storage.
- *
- * Lives in its own 128 KB sector (sector 6 bank 2 via FLASH_ODOMETER_START_ADDR),
- * distinct from FLASH_USER_START_ADDR which is owned by motion_config. The
- * STM32H7 minimum erase granularity is one 128 KB sector, so the two stores
- * must not co-tenant — otherwise either Odometer_Persist_Both() or
- * motion_cfg flash writes would wipe the other tenant. */
-#define ODOMETER_FLASH_BASE_ADDR    (FLASH_ODOMETER_START_ADDR)
-#define SYSTEM_ODO_FLASH_ADDR       (ODOMETER_FLASH_BASE_ADDR)
-#define LASER_ODO_FLASH_ADDR        (ODOMETER_FLASH_BASE_ADDR + 32)
+/* Wear-levelling ring in the user region of the EEPROM. Each record is exactly
+ * one 16-byte EEPROM page, page-aligned, so every persist is a single page
+ * write. The ring lives in 0x00..0xEF (15 slots); 0xF0..0xFF is left untouched
+ * (the 24AA025E48's protected EUI-48 node address sits at 0xFA..0xFF). */
+#define ODO_RECORD_SIZE   16u
+#define ODO_RING_BASE     0x00u
+#define ODO_RING_SLOTS    15u   /* 15 * 16 = 240 bytes -> ends at 0xF0 */
 
-/* Magic number identifying a valid odometer flash block. Reading anything other
- * than this magic + matching CRC at boot means the block is invalid (uninitialised
- * flash, stale data from a previous firmware that used this sector for something
- * else, partial-erase corruption) — the init path treats that as "first boot"
- * and writes a fresh zero block. */
-#define ODOMETER_MAGIC 0x4F444F31u  /* "ODO1" */
+/* Magic + sequence + CRC identify the newest valid record at boot and reject
+ * uninitialised / foreign bytes. */
+#define ODO_RECORD_MAGIC  0x4F44u  /* "OD" */
 
-/* On-flash format. 16 bytes per odometer; written as a 32-byte zero-padded block. */
+/* On-EEPROM record layout. Exactly ODO_RECORD_SIZE bytes. */
 typedef struct __attribute__((packed)) {
-    uint32_t magic;       /* ODOMETER_MAGIC */
-    uint32_t value;       /* total_minutes for system, total_pulses for laser */
-    uint32_t reserved;    /* 0 for now, future fields */
-    uint32_t crc32;       /* CRC32 of magic + value + reserved */
-} OdoFlashBlock_t;
+    uint16_t magic;          /* ODO_RECORD_MAGIC */
+    uint16_t seq;            /* wrapping write sequence; newest wins */
+    uint32_t total_minutes;  /* system odometer */
+    uint32_t total_pulses;   /* laser odometer */
+    uint16_t reserved;       /* 0 for now */
+    uint16_t crc16;          /* CRC16-CCITT over the preceding 14 bytes */
+} OdoRecord_t;
 
-/* Update interval: how often we erase+rewrite the flash sector during normal
- * runtime to persist the system odometer. STM32H7 flash sector endurance is
- * ~10K cycles, so we keep this conservative — 6 hours = ~4 writes/day, giving
- * roughly 7 years of continuous-run wear life per device. The laser odometer
- * is only persisted on scan-finish (a natural rate-limiter), so it doesn't
- * need its own interval. */
-#define SYSTEM_ODO_UPDATE_INTERVAL_MS  (6UL * 60UL * 60UL * 1000UL)  /* 6 hours */
+_Static_assert(sizeof(OdoRecord_t) == ODO_RECORD_SIZE,
+               "OdoRecord_t must be exactly one EEPROM page");
+
+/* How often the system odometer is persisted during normal runtime. The
+ * external EEPROM's endurance lets us go much tighter than the old 6-hour
+ * internal-flash cadence: at 2 min that's ~720 writes/day, spread over
+ * ODO_RING_SLOTS slots => ~48 writes/byte/day => >50 yr at 1e6 cycles. */
+#define SYSTEM_ODO_UPDATE_INTERVAL_MS  (2UL * 60UL * 1000UL)  /* 2 minutes */
 
 /* Reset targets for Odometer_Reset() / OW_CTRL_RESET_ODO. */
 typedef enum {
@@ -73,8 +76,8 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void);
 uint32_t Odometer_Get_System_Minutes(void);
 uint32_t Odometer_Get_Laser_Pulses(void);
 
-/* Reset one or both odometers to zero and persist the cleared state to flash.
- * target ∈ ODO_RESET_SYSTEM / _LASER / _BOTH. Returns HAL_OK on success. */
+/* Reset one or both odometers to zero and persist the cleared state to the
+ * EEPROM. target ∈ ODO_RESET_SYSTEM / _LASER / _BOTH. Returns HAL_OK on success. */
 HAL_StatusTypeDef Odometer_Reset(OdoResetTarget target);
 
 #endif /* INC_ODOMETER_H_ */

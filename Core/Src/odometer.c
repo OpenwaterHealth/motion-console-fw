@@ -3,11 +3,15 @@
  *
  *  Created on: Apr 29, 2026
  *      Author: Claude
+ *
+ * Storage backend: external 24AA025E48 I2C EEPROM (see odometer.h and
+ * eeprom_24aa025.h). Persists a single combined {system,laser} record into a
+ * wear-levelling ring of ODO_RING_SLOTS page-sized slots; each persist writes
+ * the next slot, so writes spread evenly across the device.
  */
 
 #include "odometer.h"
-#include "flash_eeprom.h"
-#include "memory_map.h"
+#include "eeprom_24aa025.h"
 #include "trigger.h"
 #include <stdio.h>
 #include <string.h>
@@ -17,186 +21,160 @@ static SystemOdometer_t system_odo;
 static LaserOdometer_t laser_odo;
 static bool odometer_initialized = false;
 
+/* EEPROM device + ring cursor. s_slot is the index of the newest record on the
+ * device (-1 until the first write). s_seq is that record's sequence number. */
+static eeprom_dev_t s_eeprom;
+static int          s_slot = -1;
+static uint16_t     s_seq  = 0;
+
 /**
- * @brief Simple CRC32 (poly 0xEDB88320, init 0xFFFFFFFF, final XOR 0xFFFFFFFF).
- * Bit-by-bit implementation — odometer reads/writes are infrequent so a table
- * isn't worth the .rodata footprint.
+ * @brief CRC16-CCITT (poly 0x1021, init 0xFFFF). Bit-by-bit — records are tiny
+ * and written infrequently, so a table isn't worth the footprint.
  */
-static uint32_t odo_crc32(const void *data, size_t len)
+static uint16_t odo_crc16(const void *data, size_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
-    uint32_t crc = 0xFFFFFFFFu;
+    uint16_t crc = 0xFFFFu;
     for (size_t i = 0; i < len; ++i) {
-        crc ^= p[i];
+        crc ^= (uint16_t)p[i] << 8;
         for (int b = 0; b < 8; ++b) {
-            uint32_t mask = 0u - (crc & 1u);
-            crc = (crc >> 1) ^ (0xEDB88320u & mask);
+            crc = (crc & 0x8000u) ? (uint16_t)((crc << 1) ^ 0x1021u)
+                                  : (uint16_t)(crc << 1);
         }
     }
-    return crc ^ 0xFFFFFFFFu;
+    return crc;
 }
 
-/**
- * @brief Pack a value into an OdoFlashBlock_t with magic + CRC.
- */
-static void odo_pack_block(OdoFlashBlock_t *out, uint32_t value)
+/** @brief EEPROM byte address of ring slot i. */
+static uint8_t odo_slot_addr(int i)
 {
-    out->magic = ODOMETER_MAGIC;
-    out->value = value;
-    out->reserved = 0;
-    out->crc32 = odo_crc32(out, offsetof(OdoFlashBlock_t, crc32));
+    return (uint8_t)(ODO_RING_BASE + (uint32_t)i * ODO_RECORD_SIZE);
 }
 
-/**
- * @brief Validate an OdoFlashBlock_t read from flash. Returns true if magic
- * matches and CRC is correct.
- */
-static bool odo_block_valid(const OdoFlashBlock_t *blk)
+/** @brief Populate a record with current values + magic + CRC. */
+static void odo_pack(OdoRecord_t *rec, uint16_t seq,
+                     uint32_t minutes, uint32_t pulses)
 {
-    if (blk->magic != ODOMETER_MAGIC) {
+    rec->magic = ODO_RECORD_MAGIC;
+    rec->seq = seq;
+    rec->total_minutes = minutes;
+    rec->total_pulses = pulses;
+    rec->reserved = 0;
+    rec->crc16 = odo_crc16(rec, offsetof(OdoRecord_t, crc16));
+}
+
+/** @brief True if a record read from the EEPROM has valid magic + CRC. */
+static bool odo_record_valid(const OdoRecord_t *rec)
+{
+    if (rec->magic != ODO_RECORD_MAGIC) {
         return false;
     }
-    uint32_t expected = odo_crc32(blk, offsetof(OdoFlashBlock_t, crc32));
-    return blk->crc32 == expected;
+    return rec->crc16 == odo_crc16(rec, offsetof(OdoRecord_t, crc16));
 }
 
 /**
- * @brief Erase the odometer flash sector (shared by both odometers).
+ * @brief Write the current in-memory totals to the next ring slot, advancing
+ * the wear-levelling cursor. Each call lands on a fresh slot (mod ring size).
  */
-static HAL_StatusTypeDef Odometer_Erase_Sector(void)
+static HAL_StatusTypeDef odo_persist(void)
 {
-    HAL_StatusTypeDef status = Flash_Erase(ODOMETER_FLASH_BASE_ADDR, ODOMETER_FLASH_BASE_ADDR);
-    if (status == HAL_OK) {
-        printf("Odometer flash sector erased\r\n");
-    } else {
-        printf("Failed to erase odometer flash sector\r\n");
+    if (!s_eeprom.present) {
+        return HAL_ERROR;
     }
-    return status;
-}
 
-/**
- * @brief Write both odometers to flash. Caller must have erased the sector
- * first (flash bytes must be 0xFF before write).
- */
-static HAL_StatusTypeDef Odometer_Write_All_To_Flash(void)
-{
-    HAL_StatusTypeDef status;
-    uint8_t buffer[32];
+    int next_slot = (s_slot < 0) ? 0 : ((s_slot + 1) % ODO_RING_SLOTS);
+    uint16_t next_seq = (uint16_t)(s_seq + 1u);
 
-    /* System odometer block. */
-    memset(buffer, 0, sizeof(buffer));
-    OdoFlashBlock_t sys_blk;
-    odo_pack_block(&sys_blk, system_odo.total_minutes);
-    memcpy(buffer, &sys_blk, sizeof(sys_blk));
-    status = Flash_Write_Bytes(SYSTEM_ODO_FLASH_ADDR, buffer, sizeof(buffer));
+    OdoRecord_t rec;
+    odo_pack(&rec, next_seq, system_odo.total_minutes, laser_odo.total_pulses);
+
+    HAL_StatusTypeDef status = EEPROM_Write(&s_eeprom, odo_slot_addr(next_slot),
+                                            (uint8_t *)&rec, sizeof(rec));
     if (status != HAL_OK) {
-        printf("Failed to write system odometer to flash\r\n");
+        printf("Odometer: EEPROM write to slot %d failed (%d)\r\n", next_slot, status);
         return status;
     }
 
-    /* Laser odometer block. */
-    memset(buffer, 0, sizeof(buffer));
-    OdoFlashBlock_t laser_blk;
-    odo_pack_block(&laser_blk, laser_odo.total_pulses);
-    memcpy(buffer, &laser_blk, sizeof(laser_blk));
-    status = Flash_Write_Bytes(LASER_ODO_FLASH_ADDR, buffer, sizeof(buffer));
-    if (status != HAL_OK) {
-        printf("Failed to write laser odometer to flash\r\n");
-        return status;
-    }
-
+    s_slot = next_slot;
+    s_seq = next_seq;
     return HAL_OK;
 }
 
 /**
- * @brief Persist current in-memory odometer values: erase the sector and
- * write both blocks back. Either both succeed or both are left undefined —
- * callers that hit an error should treat the flash state as suspect.
- */
-static HAL_StatusTypeDef Odometer_Persist_Both(void)
-{
-    HAL_StatusTypeDef status = Odometer_Erase_Sector();
-    if (status != HAL_OK) {
-        return status;
-    }
-    return Odometer_Write_All_To_Flash();
-}
-
-/**
- * @brief Initialize odometer module by reading from flash.
- * If the read block doesn't carry the expected magic + matching CRC, treats
- * it as first boot: zeros the in-memory value AND immediately writes a valid
- * zero block to flash so the next boot reads clean. This recovers automatically
- * from uninitialised flash, partial erases, and stale data left behind by a
- * previous firmware that used the same sector.
+ * @brief Initialize odometer module: detect the EEPROM, then load the newest
+ * valid record from the ring. If no valid record exists (fresh device, foreign
+ * bytes), starts both odometers at zero and writes an initial record so the
+ * next boot reads clean.
  */
 HAL_StatusTypeDef Odometer_Init(void)
 {
-    HAL_StatusTypeDef status;
-    uint8_t buffer[32];
-    bool need_rewrite = false;
-
-    /* Zero the in-memory state up front so a partial init still leaves
-     * sensible values. */
+    /* Zero in-memory state up front so a partial init still leaves sane values. */
     memset(&system_odo, 0, sizeof(system_odo));
     memset(&laser_odo, 0, sizeof(laser_odo));
+    s_slot = -1;
+    s_seq = 0;
+    odometer_initialized = false;
 
-    /* --- System odometer --- */
-    status = Flash_Read_Bytes(SYSTEM_ODO_FLASH_ADDR, buffer, sizeof(OdoFlashBlock_t));
-    if (status != HAL_OK) {
-        printf("Failed to read system odometer from flash\r\n");
-        return status;
+    if (EEPROM_Init(&s_eeprom) != HAL_OK) {
+        printf("Odometer: EEPROM not present — odometers disabled\r\n");
+        return HAL_ERROR;
     }
-    OdoFlashBlock_t sys_blk;
-    memcpy(&sys_blk, buffer, sizeof(sys_blk));
-    if (odo_block_valid(&sys_blk)) {
-        system_odo.total_minutes = sys_blk.value;
-    } else {
-        printf("System odometer flash invalid (magic=0x%08lX) — resetting\r\n",
-               (unsigned long)sys_blk.magic);
-        system_odo.total_minutes = 0;
-        need_rewrite = true;
-    }
-    system_odo.last_update_tick = HAL_GetTick();
 
-    /* --- Laser odometer --- */
-    status = Flash_Read_Bytes(LASER_ODO_FLASH_ADDR, buffer, sizeof(OdoFlashBlock_t));
-    if (status != HAL_OK) {
-        printf("Failed to read laser odometer from flash\r\n");
-        return status;
+    /* Log the factory EUI-48 (also a free per-board serial number). */
+    uint8_t eui[EEPROM_EUI48_LEN];
+    if (EEPROM_ReadEUI48(&s_eeprom, eui) == HAL_OK) {
+        printf("EEPROM EUI-48: %02X:%02X:%02X:%02X:%02X:%02X\r\n",
+               eui[0], eui[1], eui[2], eui[3], eui[4], eui[5]);
     }
-    OdoFlashBlock_t laser_blk;
-    memcpy(&laser_blk, buffer, sizeof(laser_blk));
-    if (odo_block_valid(&laser_blk)) {
-        laser_odo.total_pulses = laser_blk.value;
-    } else {
-        printf("Laser odometer flash invalid (magic=0x%08lX) — resetting\r\n",
-               (unsigned long)laser_blk.magic);
-        laser_odo.total_pulses = 0;
-        need_rewrite = true;
-    }
-    laser_odo.scan_start_pulses = 0;
 
-    odometer_initialized = true;
-
-    /* If we recovered from invalid flash, write clean blocks now so the next
-     * boot doesn't have to do this again. Best-effort — a failure here is
-     * survivable (we just repeat the recovery on next boot). */
-    if (need_rewrite) {
-        if (Odometer_Persist_Both() != HAL_OK) {
-            printf("Odometer: failed to persist recovered zero state\r\n");
+    /* Scan every slot; keep the valid record with the newest (wrapping) seq. */
+    bool found = false;
+    OdoRecord_t best;
+    int best_slot = -1;
+    for (int i = 0; i < (int)ODO_RING_SLOTS; ++i) {
+        OdoRecord_t rec;
+        if (EEPROM_Read(&s_eeprom, odo_slot_addr(i), (uint8_t *)&rec, sizeof(rec)) != HAL_OK) {
+            continue;
+        }
+        if (!odo_record_valid(&rec)) {
+            continue;
+        }
+        if (!found || (int16_t)(rec.seq - best.seq) > 0) {
+            best = rec;
+            best_slot = i;
+            found = true;
         }
     }
 
-    printf("Odometers initialized: System=%lu min, Laser=%lu pulses\r\n",
-           system_odo.total_minutes, laser_odo.total_pulses);
+    if (found) {
+        system_odo.total_minutes = best.total_minutes;
+        laser_odo.total_pulses = best.total_pulses;
+        s_slot = best_slot;
+        s_seq = best.seq;
+        odometer_initialized = true;
+    } else {
+        /* Fresh device: write an initial zero record so the next boot reads
+         * clean. Best-effort — a failure is survivable (we retry next boot). */
+        printf("Odometer: no valid EEPROM record — initializing to zero\r\n");
+        odometer_initialized = true;  /* allow odo_persist() to run */
+        if (odo_persist() != HAL_OK) {
+            printf("Odometer: failed to write initial EEPROM record\r\n");
+        }
+    }
+
+    system_odo.last_update_tick = HAL_GetTick();
+    laser_odo.scan_start_pulses = 0;
+
+    printf("Odometers initialized: System=%lu min, Laser=%lu pulses (slot %d, seq %u)\r\n",
+           (unsigned long)system_odo.total_minutes,
+           (unsigned long)laser_odo.total_pulses, s_slot, (unsigned)s_seq);
     return HAL_OK;
 }
 
 /**
  * @brief Update system odometer (call periodically).
  * Accumulates minutes since last persist; when the configured update interval
- * has elapsed, erases the sector and writes both blocks back.
+ * has elapsed, writes the next ring slot.
  */
 HAL_StatusTypeDef Odometer_Update_System(void)
 {
@@ -211,21 +189,21 @@ HAL_StatusTypeDef Odometer_Update_System(void)
     if (current_tick >= system_odo.last_update_tick) {
         elapsed_ms = current_tick - system_odo.last_update_tick;
     } else {
-        /* Overflow occurred */
         elapsed_ms = (0xFFFFFFFF - system_odo.last_update_tick) + current_tick + 1;
     }
 
-    /* Persist on the configured interval (default 6 h — see odometer.h). */
+    /* Persist on the configured interval (default 2 min — see odometer.h). */
     if (elapsed_ms >= SYSTEM_ODO_UPDATE_INTERVAL_MS) {
         uint32_t minutes_to_add = elapsed_ms / (60UL * 1000UL);
         system_odo.total_minutes += minutes_to_add;
         system_odo.last_update_tick = current_tick;
 
-        HAL_StatusTypeDef status = Odometer_Persist_Both();
+        HAL_StatusTypeDef status = odo_persist();
         if (status != HAL_OK) {
             return status;
         }
-        printf("System odometer persisted: %lu minutes\r\n", system_odo.total_minutes);
+        printf("System odometer persisted: %lu minutes\r\n",
+               (unsigned long)system_odo.total_minutes);
     }
 
     return HAL_OK;
@@ -240,7 +218,8 @@ HAL_StatusTypeDef Odometer_Scan_Start(void)
         return HAL_ERROR;
     }
     laser_odo.scan_start_pulses = get_lsync_pulse_count();
-    printf("Scan started, laser pulses at start: %lu\r\n", laser_odo.scan_start_pulses);
+    printf("Scan started, laser pulses at start: %lu\r\n",
+           (unsigned long)laser_odo.scan_start_pulses);
     return HAL_OK;
 }
 
@@ -267,7 +246,7 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void)
     printf("Scan finished, pulses this scan: %lu, total: %lu\r\n",
            (unsigned long)scan_pulses, (unsigned long)laser_odo.total_pulses);
 
-    HAL_StatusTypeDef status = Odometer_Persist_Both();
+    HAL_StatusTypeDef status = odo_persist();
     if (status != HAL_OK) {
         return status;
     }
@@ -278,9 +257,6 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void)
 
 /**
  * @brief Reset one or both odometers to zero and persist.
- * Note: the underlying sector erase wipes BOTH blocks, so even a single-target
- * reset has to re-write the other from in-memory state. That's fine — the
- * other in-memory value is the most up-to-date we have.
  */
 HAL_StatusTypeDef Odometer_Reset(OdoResetTarget target)
 {
@@ -310,7 +286,7 @@ HAL_StatusTypeDef Odometer_Reset(OdoResetTarget target)
             return HAL_ERROR;
     }
 
-    return Odometer_Persist_Both();
+    return odo_persist();
 }
 
 /**
