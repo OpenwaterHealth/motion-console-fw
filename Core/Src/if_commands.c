@@ -551,6 +551,22 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         last_laser_odo = Odometer_Get_Laser_Pulses();
         uartResp->data = (uint8_t *)&last_laser_odo;
         break;
+    case OW_CTRL_GET_EEPROM_EUI: {
+        /* Return the external EEPROM's factory EUI-48 (6 bytes, MSB first) as a
+         * unique per-board serial. OW_ERROR if the EEPROM wasn't detected. */
+        uartResp->command = OW_CTRL_GET_EEPROM_EUI;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        static uint8_t eui_resp[6];
+        if (Odometer_Get_EUI48(eui_resp) == HAL_OK) {
+            uartResp->data_len = sizeof(eui_resp);
+            uartResp->data = eui_resp;
+        } else {
+            uartResp->data_len = 0;
+            uartResp->packet_type = OW_ERROR;
+        }
+        break;
+    }
     case OW_CTRL_RESET_ODO: {
         uartResp->command = OW_CTRL_RESET_ODO;
         uartResp->addr = cmd->addr;

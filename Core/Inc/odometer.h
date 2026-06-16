@@ -76,6 +76,11 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void);
 uint32_t Odometer_Get_System_Minutes(void);
 uint32_t Odometer_Get_Laser_Pulses(void);
 
+/* Read the EEPROM's factory-programmed 6-byte EUI-48 (a unique per-board
+ * serial). Returns HAL_OK and fills eui[6] on success; HAL_ERROR if the EEPROM
+ * wasn't detected at init. */
+HAL_StatusTypeDef Odometer_Get_EUI48(uint8_t eui[6]);
+
 /* Reset one or both odometers to zero and persist the cleared state to the
  * EEPROM. target ∈ ODO_RESET_SYSTEM / _LASER / _BOTH. Returns HAL_OK on success. */
 HAL_StatusTypeDef Odometer_Reset(OdoResetTarget target);

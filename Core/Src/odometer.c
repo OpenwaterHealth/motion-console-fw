@@ -322,3 +322,14 @@ uint32_t Odometer_Get_Laser_Pulses(void)
     }
     return laser_odo.total_pulses;
 }
+
+/**
+ * @brief Read the EEPROM's factory EUI-48 (unique per-board serial).
+ */
+HAL_StatusTypeDef Odometer_Get_EUI48(uint8_t eui[6])
+{
+    if (!s_eeprom.present || eui == NULL) {
+        return HAL_ERROR;
+    }
+    return EEPROM_ReadEUI48(&s_eeprom, eui);
+}
