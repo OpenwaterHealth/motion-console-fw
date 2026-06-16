@@ -45,6 +45,62 @@ static bool mux_select(uint8_t mux_index, uint8_t channel)
 	return TCA9548A_SelectChannel(mux_index, channel) == TCA9548A_OK;
 }
 
+/* --- mux0 ch0: Seed config FPGA (XO2) --- */
+static void scan_mux0(console_i2c_health_t *h)
+{
+	if (mux_select(0, 0)) {
+		h->seed_cfg_fpga = ping(&hi2c1, SEED_CFG_FPGA_ADDR) ? 1u : 0u;
+	}
+}
+
+/* --- mux1 ch0: GPIO expander + two PDU monitor ADCs --- */
+static void scan_mux1_ch0(console_i2c_health_t *h)
+{
+	if (mux_select(1, 0)) {
+		h->gpio_exp = ping(&hi2c2, GPIO_EXP_ADDR) ? 1u : 0u;
+		h->pdu_adc0 = ping(&hi2c2, PDU_ADC0_ADDR) ? 1u : 0u;
+		h->pdu_adc1 = ping(&hi2c2, PDU_ADC1_ADDR) ? 1u : 0u;
+	}
+}
+
+/* --- mux1 ch1: three MAX31875 temperature sensors --- */
+static void scan_mux1_ch1(console_i2c_health_t *h)
+{
+	if (mux_select(1, 1)) {
+		if (ping(&hi2c2, TEMP1_ADDR)) h->temp_present |= I2C_HEALTH_TEMP1_BIT;
+		if (ping(&hi2c2, TEMP2_ADDR)) h->temp_present |= I2C_HEALTH_TEMP2_BIT;
+		if (ping(&hi2c2, TEMP3_ADDR)) h->temp_present |= I2C_HEALTH_TEMP3_BIT;
+	}
+}
+
+/* --- mux1 ch3: TEC ADC (ADS7924) --- */
+static void scan_mux1_ch3(console_i2c_health_t *h)
+{
+	if (mux_select(1, 3)) {
+		h->tec_adc = ping(&hi2c2, TEC_ADC_ADDR) ? 1u : 0u;
+	}
+}
+
+/* --- mux1 ch4..7: TA / Seed / EE / OPT application FPGAs at 0x41 --- */
+static void scan_mux1_fpgas(console_i2c_health_t *h)
+{
+	for (uint8_t ch = 4; ch <= 7; ch++) {
+		if (mux_select(1, ch) && ping(&hi2c2, APP_FPGA_ADDR)) {
+			h->fpga_present |= (uint8_t)(1u << ch);
+		}
+	}
+}
+
+/* All fields set to exactly 0 or 1, so bitwise AND equals logical AND. */
+static uint8_t compute_all_present(const console_i2c_health_t *h)
+{
+	uint8_t ok = h->mux0 & h->mux1 & h->seed_cfg_fpga & h->gpio_exp &
+	             h->pdu_adc0 & h->pdu_adc1 & h->tec_adc & h->fan;
+	uint8_t temps_ok = (h->temp_present == I2C_HEALTH_TEMP_ALL) ? 1u : 0u;
+	uint8_t fpgas_ok = (h->fpga_present == I2C_HEALTH_FPGA_ALL) ? 1u : 0u;
+	return ok & temps_ok & fpgas_ok;
+}
+
 void console_i2c_health_scan(void)
 {
 	console_i2c_health_t h;
@@ -59,36 +115,11 @@ void console_i2c_health_scan(void)
 	h.mux0 = ping(&hi2c1, MUX_ADDR) ? 1u : 0u;
 	h.mux1 = ping(&hi2c2, MUX_ADDR) ? 1u : 0u;
 
-	/* --- mux0 ch0: Seed config FPGA (XO2) --- */
-	if (mux_select(0, 0)) {
-		h.seed_cfg_fpga = ping(&hi2c1, SEED_CFG_FPGA_ADDR) ? 1u : 0u;
-	}
-
-	/* --- mux1 ch0: GPIO expander + two PDU monitor ADCs --- */
-	if (mux_select(1, 0)) {
-		h.gpio_exp = ping(&hi2c2, GPIO_EXP_ADDR) ? 1u : 0u;
-		h.pdu_adc0 = ping(&hi2c2, PDU_ADC0_ADDR) ? 1u : 0u;
-		h.pdu_adc1 = ping(&hi2c2, PDU_ADC1_ADDR) ? 1u : 0u;
-	}
-
-	/* --- mux1 ch1: three MAX31875 temperature sensors --- */
-	if (mux_select(1, 1)) {
-		if (ping(&hi2c2, TEMP1_ADDR)) h.temp_present |= I2C_HEALTH_TEMP1_BIT;
-		if (ping(&hi2c2, TEMP2_ADDR)) h.temp_present |= I2C_HEALTH_TEMP2_BIT;
-		if (ping(&hi2c2, TEMP3_ADDR)) h.temp_present |= I2C_HEALTH_TEMP3_BIT;
-	}
-
-	/* --- mux1 ch3: TEC ADC (ADS7924) --- */
-	if (mux_select(1, 3)) {
-		h.tec_adc = ping(&hi2c2, TEC_ADC_ADDR) ? 1u : 0u;
-	}
-
-	/* --- mux1 ch4..7: TA / Seed / EE / OPT application FPGAs at 0x41 --- */
-	for (uint8_t ch = 4; ch <= 7; ch++) {
-		if (mux_select(1, ch) && ping(&hi2c2, APP_FPGA_ADDR)) {
-			h.fpga_present |= (uint8_t)(1u << ch);
-		}
-	}
+	scan_mux0(&h);
+	scan_mux1_ch0(&h);
+	scan_mux1_ch1(&h);
+	scan_mux1_ch3(&h);
+	scan_mux1_fpgas(&h);
 
 	/* --- I2C4: fan controller (no mux) --- */
 	h.fan = ping(&hi2c4, FAN_ADDR) ? 1u : 0u;
@@ -97,10 +128,7 @@ void console_i2c_health_scan(void)
 	TCA9548A_DisableAll(0);
 	TCA9548A_DisableAll(1);
 
-	h.all_present = (h.mux0 && h.mux1 && h.seed_cfg_fpga && h.gpio_exp &&
-	                 h.pdu_adc0 && h.pdu_adc1 && h.tec_adc && h.fan &&
-	                 h.temp_present == I2C_HEALTH_TEMP_ALL &&
-	                 h.fpga_present == I2C_HEALTH_FPGA_ALL) ? 1u : 0u;
+	h.all_present = compute_all_present(&h);
 
 	s_health = h;
 
