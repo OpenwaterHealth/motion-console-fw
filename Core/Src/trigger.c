@@ -157,21 +157,23 @@ static void updateTimerDataFromPeripheral()
 	 trigger_config.TriggerStatus = TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 }
 
-static void trigger_usb_disconnect_cb(void)
+static void trigger_usb_disconnect_cb(usb_event_t event)
 {
+    (void)event;
     _usb_trigger_interlock = 1;
     Trigger_Stop();
 }
 
-static void trigger_usb_connect_cb(void)
+static void trigger_usb_connect_cb(usb_event_t event)
 {
+    (void)event;
     _usb_trigger_interlock = 0;
 }
 
 void trigger_init(void)
 {
-    usb_register_disconnect_callback(trigger_usb_disconnect_cb);
-    usb_register_connect_callback(trigger_usb_connect_cb);
+    usb_register_callback(USB_EVENT_DISCONNECT, trigger_usb_disconnect_cb);
+    usb_register_callback(USB_EVENT_CONNECT, trigger_usb_connect_cb);
 }
 
 void Trigger_Safety_Disconnect(void)

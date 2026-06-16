@@ -226,7 +226,7 @@ void HAL_PCD_ResetCallback(PCD_HandleTypeDef *hpcd)
   USBD_LL_Reset((USBD_HandleTypeDef*)hpcd->pData);
   // Host detected us (cable plugged in, enumeration starting)
   if(!usb_connected){
-    usb_notify_connect();
+    usb_notify(USB_EVENT_CONNECT);
   }
   usb_connected = 1;
 }
@@ -250,7 +250,7 @@ void HAL_PCD_SuspendCallback(PCD_HandleTypeDef *hpcd)
   /* USER CODE BEGIN 2 */
   // Often indicates unplug OR host sleep
   if(usb_connected){
-    usb_notify_disconnect();
+    usb_notify(USB_EVENT_DISCONNECT);
   }
   usb_connected = 0;
   if (hpcd->Init.low_power_enable)
@@ -275,7 +275,7 @@ void HAL_PCD_ResumeCallback(PCD_HandleTypeDef *hpcd)
 {
   /* USER CODE BEGIN 3 */
   if(!usb_connected){
-    usb_notify_connect();
+    usb_notify(USB_EVENT_CONNECT);
   }
   usb_connected = 1;
 
