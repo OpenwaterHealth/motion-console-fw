@@ -31,6 +31,7 @@
 #include "pdc_poll.h"
 #include "led_driver.h"
 #include "tca9548a.h"
+#include "console_i2c_health.h"
 #include "pca9535.h"
 #include "ads7828.h"
 #include "ads7924.h"
@@ -553,6 +554,11 @@ int main(void)
   TCA9548A_SelectChannel(1, 0);
   PCA9535APW_Init(&hi2c2);
   PCA9535APW_WritePin(0, 7, 1); // shut led off
+
+  /* Boot-time I2C health scan: passively verify every expected device across
+   * both muxes and the fan bus. Caches a snapshot the host reads via
+   * OW_CTRL_I2C_STATUS. Runs before telemetry/USB so the bus is quiet. */
+  console_i2c_health_scan();
 
   // Init USB
   MX_USB_DEVICE_Init();
