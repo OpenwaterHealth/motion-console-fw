@@ -47,6 +47,7 @@
 #include "utils.h"
 #include "msg_queue.h"
 #include "odometer.h"
+#include "console_serial.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -576,6 +577,10 @@ int main(void)
   printf("Initialize odometers\r\n");
   if(Odometer_Init() != HAL_OK){
       printf("Failed to initialize odometers\r\n");
+  }
+
+  if (Serial_Init() != HAL_OK) {
+      printf("Serial_Init failed — console serial number unavailable\r\n");
   }
 
   HAL_Delay(100);

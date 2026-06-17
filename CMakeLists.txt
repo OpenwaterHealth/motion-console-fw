@@ -122,6 +122,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/pdc_buffer.c
     Core/Src/pdc_poll.c
     Core/Src/odometer.c
+    Core/Src/console_serial.c
     Core/Src/eeprom_24aa025.c
 )
 
