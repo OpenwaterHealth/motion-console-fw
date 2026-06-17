@@ -103,11 +103,26 @@ These commands apply to the device as a whole and are typically sent using `OW_C
 | `OW_CMD_ECHO`       | Echo payload back to sender |
 | `OW_CMD_TOGGLE_LED` | Toggle status LED           |
 | `OW_CMD_HWID`       | Hardware ID query           |
+| `OW_CMD_SERIAL`     | Read/write console serial number (see below) |
 | `OW_CMD_DFU`        | Enter DFU/bootloader mode   |
 | `OW_CMD_NOP`        | No operation                |
 | `OW_CMD_RESET`      | Software reset              |
 
 These commands usually generate an `OW_RESP` or `OW_ACK` packet.
+
+### OW_CMD_SERIAL (0x07)
+
+Read or write the console hardware serial number stored in the external EEPROM.
+Selected by the `reserved` byte:
+
+| reserved | Action            | Payload (in)        | Payload (out)                              |
+|----------|-------------------|---------------------|--------------------------------------------|
+| 0        | read              | —                   | ASCII serial; `data_len` = length (0 = unprogrammed) |
+| 1        | write (guarded)   | ASCII serial bytes  | empty ACK; `OW_ERROR` if already programmed |
+| 2        | write (force)     | ASCII serial bytes  | empty ACK                                  |
+
+Serial is 1–24 uppercase-alphanumeric (`[A-Z0-9]`) characters. Stored as a
+32-byte CRC16-checked record at EEPROM offset `0xD0`.
 
 ---
 
