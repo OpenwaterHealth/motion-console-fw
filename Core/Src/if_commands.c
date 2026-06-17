@@ -328,8 +328,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->reserved = cmd->reserved;
         uartResp->data_len = 0;
 
-        LED_RGB_SET(LED_BLUE); // Blue
-        Trigger_Start();
+        Trigger_Start(); // sets the indicator blue on success
         break;
     case OW_CTRL_STOP_TRIG:
         uartResp->command = OW_CTRL_STOP_TRIG;
@@ -337,8 +336,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->reserved = cmd->reserved;
         uartResp->data_len = 0;
 
-        LED_RGB_SET(LED_GREEN); // Green
-        Trigger_Stop();
+        Trigger_Stop(); // returns the indicator to idle (green)
         break;
     case OW_CTRL_GET_FSYNC:
         uartResp->command = OW_CTRL_GET_FSYNC;
