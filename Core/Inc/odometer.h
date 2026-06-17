@@ -19,14 +19,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* Wear-levelling ring in the user region of the EEPROM. Each record is exactly
- * one 16-byte EEPROM page, page-aligned, so every persist is a single page
- * write. The ring lives in 0x00..0xCF (13 slots); 0xD0..0xEF holds the console
- * serial record (see console_serial.h); 0xF0..0xFF is left untouched (the
- * 24AA025E48's protected EUI-48 node address sits at 0xFA..0xFF). */
+/* Wear-levelling ring in the writable region of the EEPROM. Each record is
+ * exactly one 16-byte EEPROM page, page-aligned, so every persist is a single
+ * page write. The 24AA025E48 permanently write-protects its UPPER HALF
+ * (0x80..0xFF) — only 0x00..0x7F is writable (datasheet DS20002124H). So the
+ * ring lives in 0x00..0x5F (6 slots) and the console serial record occupies
+ * 0x60..0x7F (see console_serial.h). Nothing above 0x80 is writable. */
 #define ODO_RECORD_SIZE   16u
 #define ODO_RING_BASE     0x00u
-#define ODO_RING_SLOTS    13u   /* 13 * 16 = 208 bytes -> ends at 0xD0; serial record lives at 0xD0..0xEF */
+#define ODO_RING_SLOTS    6u    /* 6 * 16 = 96 bytes -> 0x00..0x5F; serial record at 0x60..0x7F */
 
 /* Magic + sequence + CRC identify the newest valid record at boot and reject
  * uninitialised / foreign bytes. */

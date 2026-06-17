@@ -10,8 +10,11 @@
  *  - 2 Kbit organised as 256 x 8 (256 bytes total)
  *  - 16-byte page write buffer
  *  - 1,000,000 write-cycle endurance, >200 yr retention
- *  - Upper bytes 0xFA..0xFF hold a factory-programmed, write-protected EUI-48
- *    node address. Never write at/above EEPROM_PROTECTED_START.
+ *  - PER THE DATASHEET (DS20002124H): the chip PERMANENTLY write-protects the
+ *    UPPER HALF of the array (0x80..0xFF) — writes there are inhibited by
+ *    hardware, reads are fine. Only the lower 128 bytes (0x00..0x7F) are
+ *    user-writable. The factory EUI-48 lives at 0xFA..0xFF inside the protected
+ *    half. Never write at/above EEPROM_PROTECTED_START.
  *
  *  Created on: Jun 16, 2026
  *      Author: Claude
@@ -27,10 +30,11 @@
 #define EEPROM_PAGE_SIZE        16u    /* page write buffer size */
 #define EEPROM_TOTAL_BYTES      256u   /* full array size */
 
-/* The EUI-48 node address occupies the last 6 bytes (0xFA..0xFF) and the
- * upper block is write-protected. Treat everything from here up as read-only;
- * the odometer ring stays strictly below this. */
-#define EEPROM_PROTECTED_START  0xF0u
+/* The chip permanently write-protects its UPPER HALF (0x80..0xFF) — hardware
+ * inhibits writes there (datasheet DS20002124H), so only 0x00..0x7F is usable.
+ * The factory EUI-48 sits at 0xFA..0xFF within the protected half. Keep ALL
+ * writable application data (odometer ring + serial record) strictly below. */
+#define EEPROM_PROTECTED_START  0x80u
 #define EEPROM_EUI48_ADDR       0xFAu
 #define EEPROM_EUI48_LEN        6u
 
