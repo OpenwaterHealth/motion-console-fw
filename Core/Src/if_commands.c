@@ -23,6 +23,7 @@
 #include "msg_queue.h"
 #include "pdc_buffer.h"
 #include "odometer.h"
+#include "console_serial.h"
 
 #include <string.h>
 
@@ -729,6 +730,58 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
                 }
                 uartResp->data_len = (uint16_t)sizeof(motion_cfg_wire_hdr_t);
                 uartResp->data = (uint8_t *)wire_buf;
+            }
+            else
+            {
+                uartResp->packet_type = OW_UNKNOWN;
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
+            }
+            break;
+        case OW_CMD_SERIAL:
+            // reserved == 0: READ  -> payload = ASCII serial (data_len 0 == unprogrammed)
+            // reserved == 1: WRITE (guarded; NAK if already programmed)
+            // reserved == 2: WRITE (force)
+            if (cmd->reserved == 0)
+            {
+                static char serial_buf[SERIAL_MAX_LEN];
+                uint8_t serial_len = 0;
+                if (Serial_Read(serial_buf, &serial_len) != HAL_OK)
+                {
+                    // Unprogrammed (or no EEPROM): empty payload, not an error.
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                }
+                else
+                {
+                    uartResp->data_len = serial_len;
+                    uartResp->data = (uint8_t *)serial_buf;
+                }
+            }
+            else if (cmd->reserved == 1 || cmd->reserved == 2)
+            {
+                _Bool force = (cmd->reserved == 2);
+                if (cmd->data == NULL || cmd->data_len == 0 ||
+                    cmd->data_len > SERIAL_MAX_LEN)
+                {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+                HAL_StatusTypeDef st =
+                    Serial_Write((const char *)cmd->data, (uint8_t)cmd->data_len, force);
+                if (st != HAL_OK)
+                {
+                    // HAL_BUSY == refused overwrite; HAL_ERROR == bad input / EEPROM fail.
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+                // ACK with empty payload on success.
+                uartResp->data_len = 0;
+                uartResp->data = NULL;
             }
             else
             {
