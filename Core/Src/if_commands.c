@@ -740,7 +740,7 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             break;
         case OW_CMD_SERIAL:
             // reserved == 0: READ  -> payload = ASCII serial (data_len 0 == unprogrammed)
-            // reserved == 1: WRITE (guarded; NAK if already programmed)
+            // reserved == 1: WRITE (guarded; OW_ERROR if already programmed)
             // reserved == 2: WRITE (force)
             if (cmd->reserved == 0)
             {
