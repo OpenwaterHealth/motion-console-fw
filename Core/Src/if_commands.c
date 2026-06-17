@@ -11,6 +11,7 @@
 #include "if_fpga_prog.h"
 #include "utils.h"
 #include "tca9548a.h"
+#include "console_i2c_health.h"
 #include "trigger.h"
 #include "fan_driver.h"
 #include "ads7828.h"
@@ -161,6 +162,16 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
                 uartResp->data = i2c_list;
             }
         }
+        break;
+    case OW_CTRL_I2C_STATUS:
+        uartResp->command = OW_CTRL_I2C_STATUS;
+        /* reserved==1 -> re-run the (passive) scan live before returning. */
+        if (cmd->reserved == 1)
+        {
+            console_i2c_health_scan();
+        }
+        uartResp->data_len = sizeof(console_i2c_health_t);
+        uartResp->data = (uint8_t *)console_i2c_health_get();
         break;
     case OW_CTRL_SET_IND:
         uartResp->command = OW_CTRL_SET_IND;
@@ -317,8 +328,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->reserved = cmd->reserved;
         uartResp->data_len = 0;
 
-        LED_RGB_SET(LED_BLUE); // Blue
-        Trigger_Start();
+        Trigger_Start(); // sets the indicator blue on success
         break;
     case OW_CTRL_STOP_TRIG:
         uartResp->command = OW_CTRL_STOP_TRIG;
@@ -326,8 +336,7 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         uartResp->reserved = cmd->reserved;
         uartResp->data_len = 0;
 
-        LED_RGB_SET(LED_GREEN); // Green
-        Trigger_Stop();
+        Trigger_Stop(); // returns the indicator to idle (green)
         break;
     case OW_CTRL_GET_FSYNC:
         uartResp->command = OW_CTRL_GET_FSYNC;
@@ -540,6 +549,22 @@ static _Bool process_controller_command(UartPacket *uartResp, UartPacket *cmd)
         last_laser_odo = Odometer_Get_Laser_Pulses();
         uartResp->data = (uint8_t *)&last_laser_odo;
         break;
+    case OW_CTRL_GET_EEPROM_EUI: {
+        /* Return the external EEPROM's factory EUI-48 (6 bytes, MSB first) as a
+         * unique per-board serial. OW_ERROR if the EEPROM wasn't detected. */
+        uartResp->command = OW_CTRL_GET_EEPROM_EUI;
+        uartResp->addr = cmd->addr;
+        uartResp->reserved = cmd->reserved;
+        static uint8_t eui_resp[6];
+        if (Odometer_Get_EUI48(eui_resp) == HAL_OK) {
+            uartResp->data_len = sizeof(eui_resp);
+            uartResp->data = eui_resp;
+        } else {
+            uartResp->data_len = 0;
+            uartResp->packet_type = OW_ERROR;
+        }
+        break;
+    }
     case OW_CTRL_RESET_ODO: {
         uartResp->command = OW_CTRL_RESET_ODO;
         uartResp->addr = cmd->addr;

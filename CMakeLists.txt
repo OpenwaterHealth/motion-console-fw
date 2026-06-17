@@ -105,6 +105,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/max31875.c
     Core/Src/pca9535.c
     Core/Src/tca9548.c
+    Core/Src/console_i2c_health.c
     Core/Src/mcp42u83.c
     Core/Src/trigger.c
     Core/Src/XO2_dev.c
@@ -121,6 +122,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Core/Src/pdc_buffer.c
     Core/Src/pdc_poll.c
     Core/Src/odometer.c
+    Core/Src/eeprom_24aa025.c
 )
 
 # Add include paths

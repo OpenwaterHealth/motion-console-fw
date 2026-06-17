@@ -23,6 +23,7 @@
 
 /* USER CODE BEGIN INCLUDE */
 #include "uart_comms.h"
+#include "usb_events.h"
 
 /* USER CODE END INCLUDE */
 
@@ -235,7 +236,21 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
     break;
 
     case CDC_SET_CONTROL_LINE_STATE:
-
+    {
+      /* For this no-data class request the CDC middleware (USBD_CDC_Setup)
+       * passes the setup packet itself as pbuf. wValue bit0 = DTR: the host
+       * asserts it while it has the VCP open and drops it when it closes the
+       * port — including when the OS closes the handle because the host
+       * process exited. Surface PORT_OPEN/PORT_CLOSE so the trigger/laser can
+       * stop the instant the host app detaches, even with the cable still
+       * plugged (no USB suspend/disconnect in that case). */
+      USBD_SetupReqTypedef *req = (USBD_SetupReqTypedef *)pbuf;
+      if (req != NULL)
+      {
+        uint8_t dtr = (uint8_t)(req->wValue & 0x0001U);
+        usb_notify(dtr ? USB_EVENT_PORT_OPEN : USB_EVENT_PORT_CLOSE);
+      }
+    }
     break;
 
     case CDC_SEND_BREAK:

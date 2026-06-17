@@ -60,7 +60,7 @@ bool usb_recovery_force(void)
      *    any "TxBusy" wait loops. */
     if (usb_connected) {
         usb_connected = 0;
-        usb_notify_disconnect();
+        usb_notify(USB_EVENT_DISCONNECT);
     }
 
     /* 3. Best-effort stop + deinit of the device library. Ignore failures -

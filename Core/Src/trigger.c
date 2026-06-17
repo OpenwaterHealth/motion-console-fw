@@ -9,6 +9,7 @@
 #include "trigger.h"
 #include "usb_events.h"
 #include "odometer.h"
+#include "led_driver.h"
 #include <stdio.h>
 #include <string.h>
 #include <stdbool.h>
@@ -157,21 +158,31 @@ static void updateTimerDataFromPeripheral()
 	 trigger_config.TriggerStatus = TIM_CHANNEL_STATE_GET(&FSYNC_TIMER, FSYNC_TIMER_CHAN);
 }
 
-static void trigger_usb_disconnect_cb(void)
+static void trigger_usb_disconnect_cb(usb_event_t event)
 {
+    (void)event;
     _usb_trigger_interlock = 1;
     Trigger_Stop();
 }
 
-static void trigger_usb_connect_cb(void)
+static void trigger_usb_connect_cb(usb_event_t event)
 {
+    (void)event;
     _usb_trigger_interlock = 0;
 }
 
 void trigger_init(void)
 {
-    usb_register_disconnect_callback(trigger_usb_disconnect_cb);
-    usb_register_connect_callback(trigger_usb_connect_cb);
+    usb_register_callback(USB_EVENT_DISCONNECT, trigger_usb_disconnect_cb);
+    usb_register_callback(USB_EVENT_CONNECT, trigger_usb_connect_cb);
+    /* A host closing the VCP (DTR de-asserted) means the host application has
+     * detached even if the USB cable is still plugged — there is no DISCONNECT
+     * in that case. Treat PORT_CLOSE exactly like a disconnect (interlock +
+     * stop the laser) and PORT_OPEN like a connect (clear the interlock). This
+     * replaces the old time-based host-loss watchdog with the deterministic
+     * usb_events host-presence signal. */
+    usb_register_callback(USB_EVENT_PORT_CLOSE, trigger_usb_disconnect_cb);
+    usb_register_callback(USB_EVENT_PORT_OPEN, trigger_usb_connect_cb);
 }
 
 void Trigger_Safety_Disconnect(void)
@@ -289,6 +300,7 @@ HAL_StatusTypeDef Trigger_Start() {
         return HAL_ERROR; // Handle error
 	}
 
+	LED_RGB_SET(LED_BLUE); // trigger/laser active
     return HAL_OK;
 }
 
@@ -311,6 +323,11 @@ HAL_StatusTypeDef Trigger_Stop() {
 	/* Update laser odometer at scan finish */
 	Odometer_Scan_Finish();
 
+	/* Return the indicator to idle on EVERY stop path — STOP_TRIG command,
+	 * USB disconnect, host VCP close (PORT_CLOSE), and the TEC safety trip —
+	 * so the console shows idle (green) whenever the laser is actually
+	 * stopped. LED_RGB_SET is pure GPIO, safe from the USB ISR context. */
+	LED_RGB_SET(LED_GREEN); // idle
     return HAL_OK;
 }
 

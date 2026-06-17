@@ -47,6 +47,14 @@ volatile uint8_t rx_flag = 0;
 volatile uint8_t tx_flag = 0;
 volatile uint8_t tx_busy = 0;
 
+/* Bound the blocking waits in UART_INTERFACE_SendDMA. tx_flag is set by the USB
+ * CDC TX-complete callback, which never fires if the host vanished mid-transmit
+ * — without a bound the superloop would hang here forever and the command
+ * interface would stay dead until a power cycle. */
+#ifndef TX_COMPLETE_TIMEOUT_MS
+#define TX_COMPLETE_TIMEOUT_MS 100u
+#endif
+
 /* consoleTemps is owned by the command-processing module */
 extern ConsoleTemperatures consoleTemps;
 
@@ -90,9 +98,15 @@ void printUartPacket(const UartPacket* packet) {
 static void UART_INTERFACE_SendDMA(const UartPacket* pResp)
 {
 	if (!pResp) return;
-	// Wait for previous transmission to complete
-	while (tx_busy) {
-		HAL_Delay(1);
+	// Wait for previous transmission to complete — bounded so a USB cut that
+	// left a prior TX stuck (tx-complete callback never fired) can't hang the
+	// main loop forever.
+	{
+		uint32_t t0 = HAL_GetTick();
+		while (tx_busy && (HAL_GetTick() - t0) < TX_COMPLETE_TIMEOUT_MS) {
+			HAL_Delay(1);
+		}
+		tx_busy = 0; // give up on a stuck prior TX rather than block
 	}
 	memset(txBuffer, 0, sizeof(txBuffer));
 	int bufferIndex = 0;
@@ -119,9 +133,14 @@ static void UART_INTERFACE_SendDMA(const UartPacket* pResp)
 	tx_flag = 0;
 	tx_busy = 1;
 	CDC_Transmit_FS(txBuffer, bufferIndex);
-	// Wait for transmit complete (blocking). In no-OS designs this is typical from main loop
-	while (!tx_flag) {
-		HAL_Delay(1);
+	// Wait for transmit complete (blocking from the main loop in this no-OS
+	// design) — bounded so an abrupt USB disconnect mid-transmit can't wedge
+	// the superloop waiting on a tx-complete callback that will never fire.
+	{
+		uint32_t t0 = HAL_GetTick();
+		while (!tx_flag && (HAL_GetTick() - t0) < TX_COMPLETE_TIMEOUT_MS) {
+			HAL_Delay(1);
+		}
 	}
 	tx_busy = 0;
 }
