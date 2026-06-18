@@ -23,6 +23,31 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # ---------------------------
+      # Determine build config from the ref:
+      #   *-dev.* tag            -> Debug   (development pre-release)
+      #   *-rc.* / X.Y.Z tag     -> Release (release candidate / final release)
+      #   branch push / dispatch -> Debug
+      # ---------------------------
+      - name: Determine build config
+        id: cfg
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "release" ]; then
+            TAG_NAME=$(python3 -c "import json;print(json.load(open('$GITHUB_EVENT_PATH'))['release']['tag_name'])")
+            IS_TAG=1
+          elif [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            TAG_NAME="$GITHUB_REF_NAME"; IS_TAG=1
+          else
+            TAG_NAME="$GITHUB_REF_NAME"; IS_TAG=0
+          fi
+          if [ "$IS_TAG" = "1" ] && [[ "$TAG_NAME" != *-dev.* ]]; then
+            CONFIG=Release
+          else
+            CONFIG=Debug
+          fi
+          echo "config=$CONFIG" >> "$GITHUB_OUTPUT"
+          echo "ref='$GITHUB_REF' event='$GITHUB_EVENT_NAME' tag='$TAG_NAME' -> build config: $CONFIG"
+
       - name: Pull build image
         run: docker pull ghcr.io/openwaterhealth/stm32-build-env:latest
 
@@ -32,15 +57,15 @@ jobs:
             -v "$GITHUB_WORKSPACE":/workspace \
             -w /workspace \
             ghcr.io/openwaterhealth/stm32-build-env:latest \
-            bash -lc "git config --global --add safe.directory /workspace && cmake --preset Debug && cmake --build build/Debug --config Debug --target all -j 10"
+            bash -lc "git config --global --add safe.directory /workspace && cmake --preset ${{ steps.cfg.outputs.config }} && cmake --build build/${{ steps.cfg.outputs.config }} --config ${{ steps.cfg.outputs.config }} --target all -j 10"
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
           name: motion-console-fw
           path: |
-            build/Debug/*.hex
-            build/Debug/*.bin
+            build/${{ steps.cfg.outputs.config }}/*.hex
+            build/${{ steps.cfg.outputs.config }}/*.bin
 
       - name: Detect release type
         id: reltype
@@ -86,6 +111,7 @@ jobs:
           echo "---" >> notes.md
           echo "**Build SHA:** \`${{ steps.buildmeta.outputs.sha }}\`" >> notes.md
           echo "**Build Time:** ${{ steps.buildmeta.outputs.datetime }}" >> notes.md
+          echo "**Build Config:** ${{ steps.cfg.outputs.config }}" >> notes.md
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -98,5 +124,5 @@ jobs:
           overwrite_files: true
           make_latest: ${{ steps.reltype.outputs.prerelease == 'false' }}
           files: |
-            build/Debug/*.hex
-            build/Debug/*.bin
+            build/${{ steps.cfg.outputs.config }}/*.hex
+            build/${{ steps.cfg.outputs.config }}/*.bin
