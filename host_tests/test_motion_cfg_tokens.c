@@ -4,10 +4,14 @@
 #include <string.h>
 
 #include "jsmn.h"
-#include "motion_cfg_limits.h"
 
 /* Pull jsmn in directly for the host build (no STM32 HAL dependencies). */
 #include "../Core/Src/jsmn.c"
+
+/* Mirror of PROD_MAX_JSON_TOKENS in Core/Inc/motion_config.h. That header
+ * pulls in the STM32 HAL, so it can't be included in this host build -- keep
+ * this value in sync with it. */
+#define PROD_MAX_JSON_TOKENS 256
 
 /*
  * Regression test for the TEC-trip "won't trip" bug.
@@ -21,7 +25,7 @@
  *
  * This test pins three things:
  *   1. a representative full config needs MORE than the old 32 tokens (the bug),
- *   2. it fits within MOTION_CFG_MAX_JSON_TOKENS (the fix), and
+ *   2. it fits within PROD_MAX_JSON_TOKENS (the fix), and
  *   3. it parses cleanly and the TEC_TRIP value is extractable.
  */
 
@@ -65,14 +69,14 @@ int main(void) {
     assert(r32 == JSMN_ERROR_NOMEM);
 
     /* (2) The production bound must hold a full config. */
-    assert(needed <= (int)MOTION_CFG_MAX_JSON_TOKENS);
+    assert(needed <= (int)PROD_MAX_JSON_TOKENS);
 
     /* (3) Parsing into a production-sized buffer succeeds with a root object. */
-    jsmntok_t toks[MOTION_CFG_MAX_JSON_TOKENS];
+    jsmntok_t toks[PROD_MAX_JSON_TOKENS];
     jsmn_parser p;
     jsmn_init(&p, NULL);
     int r = jsmn_parse(&p, REAL_CONFIG, strlen(REAL_CONFIG), toks,
-                       MOTION_CFG_MAX_JSON_TOKENS, NULL);
+                       PROD_MAX_JSON_TOKENS, NULL);
     assert(r == needed);
     assert(toks[0].type == JSMN_OBJECT);
 

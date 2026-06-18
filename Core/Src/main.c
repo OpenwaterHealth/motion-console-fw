@@ -42,7 +42,6 @@
 #include "XO2_cmds.h"
 #include "if_fpga_prog.h"
 #include "motion_config.h"
-#include "motion_cfg_limits.h"
 #include "fpga_register_map.h"
 #include "jsmn.h"
 #include "utils.h"

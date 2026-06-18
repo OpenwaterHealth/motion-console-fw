@@ -29,6 +29,20 @@ extern "C" {
 #define MOTION_CFG_JSON_MAX       (MOTION_CFG_PAGE_SIZE - MOTION_CFG_HEADER_SIZE)
 // -> 2030 bytes
 
+// Upper bound on the jsmn tokens needed to tokenize the config JSON in
+// motion_cfg_apply_settings(). A JSON object with N keys needs 1 + 2*N tokens.
+// The config carries the safety params (TEC_TRIP, OPT/EE thresholds and gains)
+// plus the writable FPGA register keys from fpga_register_map.c -- ~75 keys
+// today (~151 tokens). 256 leaves headroom for schema growth.
+//
+// Sized deliberately: a previous fixed value of 32 was silently too small for a
+// real (~1 KB) config, so jsmn returned JSMN_ERROR_NOMEM and the firmware
+// skipped applying settings -- leaving TEC_TRIP_VALUE at 0 and disarming the TEC
+// thermal trip. If this bound is ever exceeded the parse now fails loudly
+// (console + host error) rather than silently. Guarded by
+// host_tests/test_motion_cfg_tokens.c.
+#define MOTION_CFG_MAX_JSON_TOKENS  256U
+
 // Persistent config blob that exactly fills one flash page.
 typedef struct __attribute__((packed, aligned(4))) {
     uint32_t magic;        // MOTION_MAGIC
