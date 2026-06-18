@@ -2,8 +2,10 @@
  * console_serial.h
  *
  * Console hardware serial number, persisted in the external 24AA025E48 EEPROM
- * (U49) at offset SERIAL_EEPROM_ADDR. The 32-byte record sits just below the
- * odometer ring and below the write-protected EUI-48 region; see
+ * (U49) at offset SERIAL_EEPROM_ADDR. The chip permanently write-protects its
+ * upper half (0x80..0xFF, datasheet DS20002124H), so the 32-byte record lives at
+ * 0x60..0x7F — just above the odometer ring (0x00..0x5F) and at the very top of
+ * the writable lower half; see
  * docs/superpowers/specs/2026-06-17-console-serial-eeprom-design.md.
  */
 
@@ -17,7 +19,7 @@
 #define SERIAL_RECORD_MAGIC    0x4E53u   /* 'SN' */
 #define SERIAL_RECORD_VERSION  1u
 #define SERIAL_MAX_LEN         24u
-#define SERIAL_EEPROM_ADDR     0xD0u     /* 32 bytes -> ends at 0xF0 (protected start) */
+#define SERIAL_EEPROM_ADDR     0x60u     /* 32 bytes -> 0x60..0x7F; ends at 0x80 (chip write-protect boundary) */
 
 /* On-EEPROM layout. Exactly 32 bytes = two 16-byte pages. */
 typedef struct __attribute__((packed)) {
