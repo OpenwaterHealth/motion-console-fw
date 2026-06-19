@@ -185,6 +185,10 @@ static int8_t CDC_DeInit_FS(void)
   * @param  length: Number of data to be sent (in bytes)
   * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
   */
+/* pbuf cannot be const: CDC_Control_FS is registered as the
+ * USBD_CDC_ItfTypeDef.Control callback (usbd_cdc.h), whose signature fixes
+ * pbuf as uint8_t*. cppcheck's own constParameterCallback message flags this. */
+/* cppcheck-suppress constParameterCallback */
 static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 {
   /* USER CODE BEGIN 5 */
@@ -244,7 +248,7 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
        * process exited. Surface PORT_OPEN/PORT_CLOSE so the trigger/laser can
        * stop the instant the host app detaches, even with the cable still
        * plugged (no USB suspend/disconnect in that case). */
-      USBD_SetupReqTypedef *req = (USBD_SetupReqTypedef *)pbuf;
+      const USBD_SetupReqTypedef *req = (const USBD_SetupReqTypedef *)pbuf;
       if (req != NULL)
       {
         uint8_t dtr = (uint8_t)(req->wValue & 0x0001U);

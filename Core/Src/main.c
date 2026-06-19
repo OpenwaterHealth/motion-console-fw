@@ -47,6 +47,7 @@
 #include "utils.h"
 #include "msg_queue.h"
 #include "odometer.h"
+#include "console_serial.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -281,14 +282,37 @@ void motion_cfg_apply_settings(void)
     if (json_str == NULL) { return; }
 
     jsmn_parser parser;
-    jsmntok_t tokens[32];
+    /* Static (not on the stack): the token pool is sized for a full config and
+     * is too large to put on the stack of a boot-path function. This routine is
+     * only ever called from the single-threaded main loop / command handler. */
+    static jsmntok_t tokens[MOTION_CFG_MAX_JSON_TOKENS];
 
     jsmn_init(&parser, NULL);
     int r = jsmn_parse(&parser, json_str, strlen(json_str), tokens,
                        sizeof(tokens) / sizeof(tokens[0]), NULL);
 
+    /* Fail LOUDLY on a parse error. A silent failure here leaves TEC_TRIP_VALUE
+     * at 0, which disarms the TEC thermal trip -- a safety interlock -- so it
+     * must be visible both on the serial console and to the host. */
+    if (r < 0) {
+        if (r == JSMN_ERROR_NOMEM) {
+            printf("ERROR: motion config exceeds %u JSON tokens; "
+                   "settings NOT applied (TEC trip NOT armed)\r\n",
+                   (unsigned)(sizeof(tokens) / sizeof(tokens[0])));
+        } else {
+            printf("ERROR: motion config JSON parse failed (jsmn err %d); "
+                   "settings NOT applied (TEC trip NOT armed)\r\n", r);
+        }
+        const char *msg = "{\"type\": \"system\", \"state\": \"error\", \"msg\": \"motion config parse failed; settings not applied\"}";
+        (void)mq_push(msg, strlen(msg));
+        return;
+    }
+
     if (r < 1 || tokens[0].type != JSMN_OBJECT) {
-        printf("Failed to parse JSON or no object found\n");
+        printf("ERROR: motion config JSON has no root object; "
+               "settings NOT applied (TEC trip NOT armed)\r\n");
+        const char *msg = "{\"type\": \"system\", \"state\": \"error\", \"msg\": \"motion config has no root object; settings not applied\"}";
+        (void)mq_push(msg, strlen(msg));
         return;
     }
 
@@ -576,6 +600,10 @@ int main(void)
   printf("Initialize odometers\r\n");
   if(Odometer_Init() != HAL_OK){
       printf("Failed to initialize odometers\r\n");
+  }
+
+  if (Serial_Init() != HAL_OK) {
+      printf("Serial_Init failed — console serial number unavailable\r\n");
   }
 
   HAL_Delay(100);
