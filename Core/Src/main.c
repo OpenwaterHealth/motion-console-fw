@@ -1806,7 +1806,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM15) {
     HAL_TIM_Base_Stop_IT(htim);
     if(_enter_dfu) {
-      *((uint32_t *)0x38000000) = 0xDEADBEEF; 
+      /* Request DFU from the custom secure bootloader (NOT the STM32 ROM
+       * loader, which is disabled in production). The bootloader reads this
+       * backup register on the next reset and, when it holds the magic, enters
+       * its USB DFU instead of launching the application. The register lives in
+       * the VBAT/backup domain and survives the software reset below.
+       *
+       * Direct CMSIS access (HAL RTC module is not enabled in this build):
+       * unlock the backup domain (DBP), clock the RTC APB register interface
+       * and kernel (LSI), then arm BL_FORCE_DFU_MAGIC in RTC->BKP7R. */
+      PWR->CR1   |= PWR_CR1_DBP;            /* disable backup-domain write protect */
+      RCC->APB4ENR |= RCC_APB4ENR_RTCAPBEN; /* RTC register APB interface clock     */
+      RCC->CSR   |= RCC_CSR_LSION;          /* LSI on (RTC kernel clock source)     */
+      { uint32_t to = 0U;
+        while (((RCC->CSR & RCC_CSR_LSIRDY) == 0U) && (++to < 0x00100000U)) { } }
+      if ((RCC->BDCR & RCC_BDCR_RTCSEL) == 0U) {
+        RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_1; /* LSI */
+      }
+      RCC->BDCR |= RCC_BDCR_RTCEN;          /* enable RTC                           */
+      RTC->BKP7R = 0xB007C0DEU;             /* BL_FORCE_DFU_MAGIC                    */
+      __DSB();
     }
 
     // Stop and De-initialize Timers

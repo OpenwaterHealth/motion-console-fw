@@ -60,12 +60,16 @@ RAM (xrw)      : ORIGIN = 0x24000000, LENGTH = 512K
 RAM_D2 (xrw)      : ORIGIN = 0x30000000, LENGTH = 288K
 RAM_D3 (xrw)      : ORIGIN = 0x38000000, LENGTH = 64K
 ITCMRAM (xrw)      : ORIGIN = 0x00000000, LENGTH = 64K
-/* Reserve the last two 128KB sectors of Bank 2 for persistent data:
+/* This image runs under the custom secure bootloader from active SLOT 1.
+ *   SLOT 1 base   : 0x08020000 (512 KB, sectors 1-4 of the 2 MB device)
+ *   Execution addr: 0x08020400 (slot base + signed-image header 0x400)
+ *   Usable length : 512 KB - 0x400 = 511 KB
+ * Persistent data still lives at fixed absolute addresses, well outside the
+ * code region and untouched by the bootloader's slot (it never erases them):
  *   Sector 7 (@ 0x081E0000) — motion_config / calibration JSON
  *   Sector 6 (@ 0x081C0000) — odometer (system uptime + laser pulses)
- * Each persists via full-sector erase, so they cannot co-tenant a sector.
- * Trimming code to 1792 KB still leaves >10x headroom for current build. */
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1792K
+ * See the bootloader's Core/Inc/memory_map.h for the full flash map. */
+FLASH (rx)      : ORIGIN = 0x08020400, LENGTH = 511K
 }
 
 /* Highest address of the user mode stack */

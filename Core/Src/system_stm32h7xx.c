@@ -90,7 +90,9 @@
 /*!< Uncomment the following line if you need to relocate the vector table
      anywhere in FLASH BANK1 or AXI SRAM, else the vector table is kept at the automatic
      remap of boot address selected */
-/* #define USER_VECT_TAB_ADDRESS */
+/* Relocated vector table: this image runs from the custom secure bootloader's
+   active slot (0x08020000) at offset SFU_IMG_IMAGE_OFFSET (0x400). */
+#define USER_VECT_TAB_ADDRESS
 
 #if defined(USER_VECT_TAB_ADDRESS)
 #if defined(DUAL_CORE) && defined(CORE_CM4)
@@ -118,8 +120,9 @@
 #define VECT_TAB_OFFSET         0x00000000U       /*!< Vector Table base offset field.
                                                        This value must be a multiple of 0x400. */
 #else
-#define VECT_TAB_BASE_ADDRESS   FLASH_BANK1_BASE  /*!< Vector Table base address field.
-                                                       This value must be a multiple of 0x400. */
+#define VECT_TAB_BASE_ADDRESS   0x08020400U       /*!< Vector Table base address field.
+                                                       Active slot (0x08020000) + image
+                                                       offset (0x400). Multiple of 0x400. */
 #define VECT_TAB_OFFSET         0x00000000U       /*!< Vector Table base offset field.
                                                        This value must be a multiple of 0x400. */
 #endif /* VECT_TAB_SRAM */
@@ -178,61 +181,18 @@
   * @retval None
   */
 
-void CheckBootloaderFlag(void) {
-    if (*((uint32_t *)0x38000000) == 0xDEADBEEF) {
-        *((uint32_t *)0x38000000) = 0; // Clear flag
-        
-
-        SysTick->CTRL = 0;
-        SysTick->LOAD = 0;
-        SysTick->VAL = 0;
-        
-        // Clear all interrupt enable and pending registers
-        for (int i = 0; i < 8; i++) {
-            NVIC->ICER[i] = 0xFFFFFFFF;
-            NVIC->ICPR[i] = 0xFFFFFFFF;
-        }
-
-        // 2. De-initialize specific peripherals used by your application
-        // Example for USB device and UART (adjust for your specific usage):
-        // if (hUsbDeviceFS.pClass != NULL) {
-        //     USBD_DeInit(&hUsbDeviceFS); // Essential for USB DFU
-        // }
-        // HAL_UART_MspDeInit(&huart2); // Example for UART2
-
-        // 3. Reset the clock configuration to the default HSI state
-        // This is crucial as the bootloader expects default clocks.
-        HAL_RCC_DeInit();
-
-        // 4. Reset all peripherals to their power-on defaults 
-        // Note: HAL_DeInit() may cause a spontaneous MCU reset on some H7 versions.
-        HAL_DeInit(); 
-        
-        // 5. Clean and Disable Caches/MPU (STM32H7 specific)
-        #if defined (SCB_CleanDCache) && defined (SCB_DisableDCache) && defined (SCB_DisableICache)
-            SCB_CleanDCache();
-            SCB_DisableDCache();
-            SCB_DisableICache();
-        #endif
-        // --- 2. Configure Hub specific GPIOs ---
-        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_8, GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_9, GPIO_PIN_RESET);
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-
-        // Set up the jump to System Memory (0x1FF09800 for H743)
-        // Corrected Base Address: 0x1FF09800
-        uint32_t JumpAddress = *(__IO uint32_t*)(0x1FF09800 + 4); 
-        void (*pJump)(void) = (void (*)(void)) JumpAddress;
-        
-        // Initialize user application's Stack Pointer
-        __set_MSP(*(__IO uint32_t*) 0x1FF09800);
-        pJump();
-    }
-}
+/*
+ * NOTE: The legacy CheckBootloaderFlag() that jumped to the STM32 system-memory
+ * ROM DFU loader (0x1FF09800) has been removed. The ROM loader is disabled in
+ * production. DFU is now requested from the custom secure bootloader instead:
+ * the application arms RTC->BKP7R = 0xB007C0DE and issues NVIC_SystemReset()
+ * (see HAL_TIM_PeriodElapsedCallback / OW_CMD_DFU). On reset the secure
+ * bootloader runs first, reads that backup register, and enters its own USB DFU
+ * download mode -- this image never needs to redirect the boot itself.
+ */
 
 void SystemInit (void)
 {
-  CheckBootloaderFlag();
 #if defined (DATA_IN_D2_SRAM)
  __IO uint32_t tmpreg;
 #endif /* DATA_IN_D2_SRAM */
