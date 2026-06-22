@@ -627,6 +627,7 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     comms_process();
+    logging_pump();   /* flush USB-printf log data after command responses */
     telemetry_poll();
     usb_recovery_task();
     pdc_poll_tick();
