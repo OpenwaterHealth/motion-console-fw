@@ -39,6 +39,10 @@ static uint32_t         s_last_poll_ms   = 0;
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
 extern uint8_t txBuffer[COMMAND_MAX_SIZE];
+/* Snapshot of the in-flight command. comms_process copies rxBuffer here and
+ * re-arms reception immediately, so the next command can land in rxBuffer
+ * while this one is still being processed/answered. */
+static uint8_t procBuffer[COMMAND_MAX_SIZE];
 extern ADS7924_HandleTypeDef tec_ads;
 extern ADS7828_HandleTypeDef adc_mon[2];
 
@@ -150,31 +154,44 @@ void comms_process(void)
 {
 	if (!rx_flag) return;
 
+	/* Snapshot the received frame, clear rxBuffer, and re-arm reception NOW —
+	 * before processing/answering. The CDC RX only stores bytes while armed
+	 * (read-to-idle); the old design re-armed only after the response was sent,
+	 * so a command arriving in that window was silently dropped (which forced
+	 * the host to pace commands ~10 ms apart). Re-arming up front lets the next
+	 * command land in rxBuffer while we work on the snapshot. rx_flag is cleared
+	 * before re-arming so a flag set for the next command can't be lost. */
+	memcpy(procBuffer, rxBuffer, COMMAND_MAX_SIZE);
+	memset(rxBuffer, 0, COMMAND_MAX_SIZE);
+	ptrReceive = 0;
+	rx_flag = 0;
+	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
+
 	UartPacket cmd = {0};
 	UartPacket resp;
 	uint16_t calculated_crc;
 	int bufferIndex = 0;
 
-	if (rxBuffer[bufferIndex++] != OW_START_BYTE) {
+	if (procBuffer[bufferIndex++] != OW_START_BYTE) {
 		resp.id = cmd.id;
 		resp.data_len = 0;
 		resp.packet_type = OW_NAK;
 		goto NextDataPacket;
 	}
 
-	cmd.id = (rxBuffer[bufferIndex] << 8 | (rxBuffer[bufferIndex+1] & 0xFF ));
+	cmd.id = (procBuffer[bufferIndex] << 8 | (procBuffer[bufferIndex+1] & 0xFF ));
 	bufferIndex += 2;
-	cmd.packet_type = rxBuffer[bufferIndex++];
-	cmd.command = rxBuffer[bufferIndex++];
-	cmd.addr = rxBuffer[bufferIndex++];
-	cmd.reserved = rxBuffer[bufferIndex++];
+	cmd.packet_type = procBuffer[bufferIndex++];
+	cmd.command = procBuffer[bufferIndex++];
+	cmd.addr = procBuffer[bufferIndex++];
+	cmd.reserved = procBuffer[bufferIndex++];
 
 	// Extract payload length
-	cmd.data_len = (rxBuffer[bufferIndex] << 8 | (rxBuffer[bufferIndex+1] & 0xFF ));
+	cmd.data_len = (procBuffer[bufferIndex] << 8 | (procBuffer[bufferIndex+1] & 0xFF ));
 	bufferIndex += 2;
 
 	// Check if data length is valid
-	if (cmd.data_len > COMMAND_MAX_SIZE - bufferIndex && rxBuffer[COMMAND_MAX_SIZE-1] != OW_END_BYTE) {
+	if (cmd.data_len > COMMAND_MAX_SIZE - bufferIndex && procBuffer[COMMAND_MAX_SIZE-1] != OW_END_BYTE) {
 		resp.id = cmd.id;
 		resp.addr = 0;
 		resp.reserved = 0;
@@ -184,7 +201,7 @@ void comms_process(void)
 	}
 
 	// Extract data pointer
-	cmd.data = &rxBuffer[bufferIndex];
+	cmd.data = &procBuffer[bufferIndex];
 	if (cmd.data_len > COMMAND_MAX_SIZE) {
 		bufferIndex = COMMAND_MAX_SIZE-3; // [3 bytes from the end should be the crc for a continuation packet]
 	} else {
@@ -192,14 +209,14 @@ void comms_process(void)
 	}
 
 	// Extract received CRC
-	cmd.crc = (rxBuffer[bufferIndex] << 8 | (rxBuffer[bufferIndex+1] & 0xFF ));
+	cmd.crc = (procBuffer[bufferIndex] << 8 | (procBuffer[bufferIndex+1] & 0xFF ));
 	bufferIndex += 2;
 
 	// Calculate CRC for received data
 	if (cmd.data_len > COMMAND_MAX_SIZE) {
-		calculated_crc = util_crc16(&rxBuffer[1], COMMAND_MAX_SIZE-3);
+		calculated_crc = util_crc16(&procBuffer[1], COMMAND_MAX_SIZE-3);
 	} else {
-		calculated_crc = util_crc16(&rxBuffer[1], cmd.data_len + 8);
+		calculated_crc = util_crc16(&procBuffer[1], cmd.data_len + 8);
 	}
 
 	// Check CRC
@@ -213,7 +230,7 @@ void comms_process(void)
 	}
 
 	// Check end byte
-	if (rxBuffer[bufferIndex++] != OW_END_BYTE) {
+	if (procBuffer[bufferIndex++] != OW_END_BYTE) {
 		resp.id = cmd.id;
 		resp.data_len = 0;
 		resp.addr = 0;
@@ -226,14 +243,9 @@ void comms_process(void)
 
 NextDataPacket:
 	UART_INTERFACE_SendDMA(&resp);
-	memset(rxBuffer, 0, sizeof(rxBuffer));
-	ptrReceive = 0;
-	rx_flag = 0;
 	if(_tec_sample_lock){
         _tec_sample_lock = false;
 	}
-	// Restart reception
-	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
 }
 
 /* ---------------------------------------------------------------------------
