@@ -210,7 +210,94 @@ EMBED_TEMPLATES = {
             }
         },
         {
-            "label": "Flash Firmware (Debug)",
+            "label": "CMake: Configure (Debug-BareMetal)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset",
+                "Debug-BareMetal"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "options": {
+                "env": {
+                    "PATH": "${TOOLCHAIN_BIN_PATH}:${env:PATH}"
+                }
+            }
+        },
+        {
+            "label": "CMake: Build (Debug-BareMetal)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/${BUILD_DIR}/Debug-BareMetal",
+                "--config",
+                "Debug",
+                "--target",
+                "all",
+                "-j",
+                "10",
+                "--verbose"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "dependsOn": [
+                "CMake: Configure (Debug-BareMetal)"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "${TOOLCHAIN_BIN_PATH}:${env:PATH}"
+                }
+            }
+        },
+        {
+            "label": "CMake: Configure (Release-BareMetal)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--preset",
+                "Release-BareMetal"
+            ],
+            "group": "build",
+            "problemMatcher": [],
+            "options": {
+                "env": {
+                    "PATH": "${TOOLCHAIN_BIN_PATH}:${env:PATH}"
+                }
+            }
+        },
+        {
+            "label": "CMake: Build (Release-BareMetal)",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/${BUILD_DIR}/Release-BareMetal",
+                "--config",
+                "Release",
+                "--target",
+                "all",
+                "-j",
+                "10"
+            ],
+            "group": "build",
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "dependsOn": [
+                "CMake: Configure (Release-BareMetal)"
+            ],
+            "options": {
+                "env": {
+                    "PATH": "${TOOLCHAIN_BIN_PATH}:${env:PATH}"
+                }
+            }
+        },
+        {
+            "label": "Flash Firmware (Debug-BareMetal)",
             "type": "shell",
             "command": "${OPENOCD_PATH}",
             "args": [
@@ -219,19 +306,19 @@ EMBED_TEMPLATES = {
                 "-f",
                 "target/${STM32_TARGET}",
                 "-c",
-                "program ${BUILD_DIR}/Debug/${ELF_NAME}.hex reset exit"
+                "program ${BUILD_DIR}/Debug-BareMetal/${ELF_NAME}.hex reset exit"
             ],
             "group": "build",
             "problemMatcher": [],
             "dependsOn": [
-                "CMake: Build (Debug)"
+                "CMake: Build (Debug-BareMetal)"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
             }
         },
         {
-            "label": "Flash Firmware (Release)",
+            "label": "Flash Firmware (Release-BareMetal)",
             "type": "shell",
             "command": "${OPENOCD_PATH}",
             "args": [
@@ -240,12 +327,12 @@ EMBED_TEMPLATES = {
                 "-f",
                 "target/${STM32_TARGET}",
                 "-c",
-                "program ${BUILD_DIR}/Release/${ELF_NAME}.hex reset exit"
+                "program ${BUILD_DIR}/Release-BareMetal/${ELF_NAME}.hex reset exit"
             ],
             "group": "build",
             "problemMatcher": [],
             "dependsOn": [
-                "CMake: Build (Release)"
+                "CMake: Build (Release-BareMetal)"
             ],
             "options": {
                 "cwd": "${workspaceFolder}"
