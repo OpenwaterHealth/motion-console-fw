@@ -1806,6 +1806,14 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM15) {
     HAL_TIM_Base_Stop_IT(htim);
     if(_enter_dfu) {
+#if defined(BARE_METAL_BUILD)
+      /* Bare-metal build: no custom bootloader. Arm the RAM magic that
+       * CheckBootloaderFlag() (in system_stm32h7xx.c) reads first thing after
+       * the reset below; it then jumps to the STM32 system-memory ROM DFU
+       * loader. D3 SRAM survives the software reset. */
+      *((volatile uint32_t *)0x38000000) = 0xDEADBEEFU; /* BL_DFU_RAM_FLAG_MAGIC */
+      __DSB();
+#else
       /* Request DFU from the custom secure bootloader (NOT the STM32 ROM
        * loader, which is disabled in production). The bootloader reads this
        * backup register on the next reset and, when it holds the magic, enters
@@ -1826,6 +1834,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
       RCC->BDCR |= RCC_BDCR_RTCEN;          /* enable RTC                           */
       RTC->BKP7R = 0xB007C0DEU;             /* BL_FORCE_DFU_MAGIC                    */
       __DSB();
+#endif
     }
 
     // Stop and De-initialize Timers

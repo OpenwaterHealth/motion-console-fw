@@ -119,6 +119,12 @@
                                                        This value must be a multiple of 0x400. */
 #define VECT_TAB_OFFSET         0x00000000U       /*!< Vector Table base offset field.
                                                        This value must be a multiple of 0x400. */
+#elif defined(BARE_METAL_BUILD)
+#define VECT_TAB_BASE_ADDRESS   0x08000000U       /*!< Vector Table base address field.
+                                                       Bare-metal image at flash base
+                                                       (no bootloader). Multiple of 0x400. */
+#define VECT_TAB_OFFSET         0x00000000U       /*!< Vector Table base offset field.
+                                                       This value must be a multiple of 0x400. */
 #else
 #define VECT_TAB_BASE_ADDRESS   0x08020400U       /*!< Vector Table base address field.
                                                        Active slot (0x08020000) + image
@@ -181,18 +187,64 @@
   * @retval None
   */
 
+#if defined(BARE_METAL_BUILD)
 /*
- * NOTE: The legacy CheckBootloaderFlag() that jumped to the STM32 system-memory
- * ROM DFU loader (0x1FF09800) has been removed. The ROM loader is disabled in
- * production. DFU is now requested from the custom secure bootloader instead:
- * the application arms RTC->BKP7R = 0xB007C0DE and issues NVIC_SystemReset()
- * (see HAL_TIM_PeriodElapsedCallback / OW_CMD_DFU). On reset the secure
- * bootloader runs first, reads that backup register, and enters its own USB DFU
- * download mode -- this image never needs to redirect the boot itself.
+ * Bare-metal build: there is no custom bootloader, so a DFU request is honoured
+ * by jumping to the STM32 system-memory ROM DFU loader (0x1FF09800 on H743).
+ * The application writes 0xDEADBEEF to D3 SRAM (0x38000000) and issues
+ * NVIC_SystemReset() (see HAL_TIM_PeriodElapsedCallback / OW_CMD_DFU). That RAM
+ * survives the reset; CheckBootloaderFlag() runs first thing in SystemInit,
+ * detects the flag, and hands control to the ROM loader.
+ *
+ * (In the default custom-bootloader build this redirect is unnecessary: the
+ * bootloader runs first and reads its own RTC backup-register magic, so this
+ * function is compiled out and SystemInit boots straight into the image.)
  */
+/* Magic written by the application to D3 SRAM to request the ROM DFU loader. */
+#define BL_DFU_RAM_FLAG_ADDR    0x38000000U
+#define BL_DFU_RAM_FLAG_MAGIC   0xDEADBEEFU
+/* STM32H743 system-memory (ROM) bootloader base. */
+#define SYSTEM_MEMORY_BASE      0x1FF09800U
+
+void CheckBootloaderFlag(void) {
+    if (*((volatile uint32_t *)BL_DFU_RAM_FLAG_ADDR) == BL_DFU_RAM_FLAG_MAGIC) {
+        *((volatile uint32_t *)BL_DFU_RAM_FLAG_ADDR) = 0U; /* clear so we boot normally next time */
+
+        /* The application reached here via NVIC_SystemReset(), so clocks,
+         * peripherals and caches are already at their reset defaults -- the ROM
+         * loader's expected entry state. Only the core-private bits the reset
+         * does not touch need clearing before we hand over. */
+        SysTick->CTRL = 0;
+        SysTick->LOAD = 0;
+        SysTick->VAL  = 0;
+
+        /* Disable and clear any pending interrupts left enabled before reset. */
+        for (int i = 0; i < 8; i++) {
+            NVIC->ICER[i] = 0xFFFFFFFFU;
+            NVIC->ICPR[i] = 0xFFFFFFFFU;
+        }
+
+        __DSB();
+        __ISB();
+
+        /* Jump to the system-memory ROM bootloader: load its stack pointer,
+         * then branch to its reset vector. */
+        uint32_t JumpAddress = *(volatile uint32_t *)(SYSTEM_MEMORY_BASE + 4U);
+        void (*pJump)(void) = (void (*)(void))JumpAddress;
+
+        __set_MSP(*(volatile uint32_t *)SYSTEM_MEMORY_BASE);
+        pJump();
+
+        while (1) { } /* unreachable */
+    }
+}
+#endif /* BARE_METAL_BUILD */
 
 void SystemInit (void)
 {
+#if defined(BARE_METAL_BUILD)
+  CheckBootloaderFlag();
+#endif
 #if defined (DATA_IN_D2_SRAM)
  __IO uint32_t tmpreg;
 #endif /* DATA_IN_D2_SRAM */

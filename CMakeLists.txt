@@ -21,6 +21,18 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE "Debug")
 endif()
 
+# ---------------------------
+# Boot mode selection
+# ---------------------------
+# OFF (default): image runs under the custom secure bootloader from the active
+#                slot (linked at 0x08020400, VTOR relocated there). A DFU
+#                request hands control back to the bootloader via the RTC
+#                backup register + reset.
+# ON           : bare-metal image flashed directly to 0x08000000 with NO
+#                bootloader. A DFU request jumps to the STM32 system-memory ROM
+#                bootloader (0x1FF09800).
+option(BARE_METAL "Build a bare-metal image (no custom bootloader; runs at 0x08000000)" OFF)
+
 # Generate version.h at configure time (initial)
 find_package(Git QUIET)
 
@@ -78,11 +90,34 @@ enable_language(C ASM)
 # Create an executable object type
 add_executable(${CMAKE_PROJECT_NAME})
 
+# Select the linker script based on the BARE_METAL option. The matching
+# BARE_METAL_BUILD compile definition is applied to the stm32cubemx interface
+# library below (after add_subdirectory) so the STM32 drivers — notably
+# system_stm32h7xx.c, which owns the VTOR base address and the ROM-bootloader
+# jump — pick it up alongside the application sources.
+if(BARE_METAL)
+    set(LINKER_SCRIPT "${CMAKE_SOURCE_DIR}/STM32H743XX_FLASH_BARE.ld")
+    message(STATUS "Boot mode    : BARE METAL (0x08000000, DFU -> ROM bootloader)")
+else()
+    set(LINKER_SCRIPT "${CMAKE_SOURCE_DIR}/STM32H743XX_FLASH.ld")
+    message(STATUS "Boot mode    : custom bootloader slot (0x08020400)")
+endif()
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -T "${LINKER_SCRIPT}")
+# Re-link when the chosen linker script changes.
+set_target_properties(${CMAKE_PROJECT_NAME} PROPERTIES LINK_DEPENDS "${LINKER_SCRIPT}")
+
 # Enable float printing in printf
 target_link_options(${CMAKE_PROJECT_NAME} PRIVATE -u _printf_float)
 
 # Add STM32CubeMX generated sources
 add_subdirectory(cmake/stm32cubemx)
+
+# Propagate the boot-mode define to every translation unit (application sources
+# and the STM32 drivers in the STM32_Drivers object library, which both consume
+# the stm32cubemx interface library).
+if(BARE_METAL)
+    target_compile_definitions(stm32cubemx INTERFACE BARE_METAL_BUILD=1)
+endif()
 
 # Link directories setup
 target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE

@@ -805,18 +805,23 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             break;
 
         case OW_CMD_DFU:
+#if defined(BARE_METAL_BUILD)
+            printf("Enter DFU (STM32 ROM bootloader)\r\n");
+#else
             printf("Enter DFU (custom bootloader)\r\n");
+#endif
             uartResp->command = cmd->command;
             uartResp->addr = cmd->addr;
             uartResp->reserved = cmd->reserved;
             uartResp->data_len = 0;
 
-            /* Request DFU from the custom secure bootloader (the STM32 ROM
-             * loader is disabled in production). The reset is deferred to the
-             * TIM15 callback so this response is transmitted and peripherals
-             * shut down cleanly first; the callback arms RTC->BKP7R with
-             * BL_FORCE_DFU_MAGIC and issues NVIC_SystemReset(), after which the
-             * bootloader enters USB DFU instead of launching this image. */
+            /* Enter DFU. The reset is deferred to the TIM15 callback so this
+             * response is transmitted and peripherals shut down cleanly first.
+             * The callback arms the DFU magic and issues NVIC_SystemReset():
+             *   - bare-metal build: RAM magic -> CheckBootloaderFlag() jumps to
+             *     the STM32 system-memory ROM DFU loader after reset.
+             *   - custom-bootloader build: RTC->BKP7R magic -> the secure
+             *     bootloader enters its own USB DFU instead of this image. */
             _enter_dfu = true;
 
             __HAL_TIM_CLEAR_FLAG(&htim15, TIM_FLAG_UPDATE);
