@@ -185,6 +185,13 @@ static int8_t CDC_DeInit_FS(void)
   * @param  length: Number of data to be sent (in bytes)
   * @retval Result of the operation: USBD_OK if all operations are OK else USBD_FAIL
   */
+/* pbuf cannot be const: CDC_Control_FS is registered as the
+ * USBD_CDC_ItfTypeDef.Control callback (usbd_cdc.h), whose signature fixes
+ * pbuf as uint8_t*. cppcheck's own constParameterCallback message flags this.
+ * NOTE: this comment is outside a USER CODE block, so STM32CubeMX regeneration
+ * will drop it. The CI scan also carries a file-scoped suppression
+ * (safety-security-scan.yml) so the check stays green if that happens. */
+/* cppcheck-suppress constParameterCallback */
 static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 {
   /* USER CODE BEGIN 5 */
