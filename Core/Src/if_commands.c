@@ -24,6 +24,7 @@
 #include "pdc_buffer.h"
 #include "odometer.h"
 #include "console_serial.h"
+#include "logging.h"
 
 #include <string.h>
 
@@ -630,6 +631,30 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             id_words[2] = HAL_GetUIDw2();
             uartResp->data_len = 16;
             uartResp->data = (uint8_t *)&id_words;
+            break;
+        case OW_CMD_DEBUG_FLAGS:
+            uartResp->command = OW_CMD_DEBUG_FLAGS;
+            /* reserved bit0: 0 = get, 1 = set (payload = uint32 little-endian).
+             * Either way we respond with the current flags. */
+            if ((cmd->reserved & 0x01) != 0)
+            {
+                if (cmd->data_len != sizeof(uint32_t))
+                {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+                uint32_t new_flags = 0;
+                memcpy(&new_flags, cmd->data, sizeof(new_flags));
+                logging_set_debug_flags(new_flags);
+            }
+            {
+                static uint32_t debug_flags_resp;
+                debug_flags_resp = logging_get_debug_flags();
+                uartResp->data_len = sizeof(debug_flags_resp);
+                uartResp->data = (uint8_t *)&debug_flags_resp;
+            }
             break;
         case OW_CMD_MESSAGES:
             uartResp->command = OW_CMD_MESSAGES;

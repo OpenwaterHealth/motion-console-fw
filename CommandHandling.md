@@ -104,6 +104,7 @@ These commands apply to the device as a whole and are typically sent using `OW_C
 | `OW_CMD_TOGGLE_LED` | Toggle status LED           |
 | `OW_CMD_HWID`       | Hardware ID query           |
 | `OW_CMD_SERIAL`     | Read/write console serial number (see below) |
+| `OW_CMD_DEBUG_FLAGS`| Get/set runtime debug flags (see below) |
 | `OW_CMD_DFU`        | Enter DFU/bootloader mode   |
 | `OW_CMD_NOP`        | No operation                |
 | `OW_CMD_RESET`      | Software reset              |
@@ -123,6 +124,34 @@ Selected by the `reserved` byte:
 
 Serial is 1–24 uppercase-alphanumeric (`[A-Z0-9]`) characters. Stored as a
 32-byte CRC16-checked record at EEPROM offset `0xD0`.
+
+### OW_CMD_DEBUG_FLAGS (0x0C)
+
+Get or set the runtime debug flags. The flags are a 32-bit bitmask held in RAM
+only (they reset to `0` on every boot). Selected by `reserved` bit 0:
+
+| reserved bit 0 | Action | Payload (in)            | Payload (out)              |
+|----------------|--------|-------------------------|----------------------------|
+| 0              | get    | —                       | current flags (`uint32` LE)|
+| 1              | set    | new flags (`uint32` LE) | resulting flags (`uint32` LE)|
+
+A `set` with a payload length other than 4 returns `OW_ERROR`. Either form
+responds with the current flag value, so a client can confirm what took effect.
+
+Defined flags (bit assignments mirror `openmotion-sensor-fw`; the console
+currently implements only bit 0):
+
+| Bit | Flag                  | Effect                                                              |
+|-----|-----------------------|--------------------------------------------------------------------|
+| 0   | `DEBUG_FLAG_USB_PRINTF` | Mirror firmware `printf()` output to the USB CDC host link        |
+
+When `DEBUG_FLAG_USB_PRINTF` is set, `printf()` continues to go to the debug
+UART and is additionally buffered and shipped to the host as `OW_DATA` packets
+with command `OW_CMD_ECHO` and `id = 0`. The host must demultiplex these from
+normal command responses (an `OW_DATA`/`OW_CMD_ECHO`/`id == 0` packet is log
+text, never a command reply). Log output is buffered in a 2 KB ring and flushed
+from the main loop; on overflow the oldest bytes are dropped and the gap is
+marked with a `~`. Clearing the flag discards any buffered log data.
 
 ---
 
