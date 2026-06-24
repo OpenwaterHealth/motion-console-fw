@@ -39,10 +39,17 @@
 
 /* Reserved persistent-data sectors. Each persists via full-sector erase
  * (the STM32H7 flash sector is 128 KB and that is the minimum erase
- * granularity), so two distinct tenants need two distinct sectors. The
- * linker script reserves both by capping FLASH at 1792 KB. */
+ * granularity), so distinct tenants need distinct sectors. The linker script
+ * reserves these by capping FLASH at 1792 KB.
+ *
+ * NOTE: Sector 6 / bank 2 (0x081C0000) is OWNED BY THE BOOTLOADER as the
+ * anti-rollback version floor (openmotion-bl: SBSFU/Target/Src/anti_rollback.c)
+ * and is protected from the DFU update path. The application MUST NOT write it.
+ * The odometer lives in the external EEPROM (see odometer.h), so the
+ * FLASH_ODOMETER_START_ADDR define below is legacy/unused — do not repurpose
+ * sector 6 for flash storage without coordinating with the bootloader. */
 #define FLASH_USER_START_ADDR     ADDR_FLASH_SECTOR_7_BANK2  /* motion_config / calibration */
-#define FLASH_ODOMETER_START_ADDR ADDR_FLASH_SECTOR_6_BANK2  /* system + laser odometer */
+#define FLASH_ODOMETER_START_ADDR ADDR_FLASH_SECTOR_6_BANK2  /* RESERVED: bootloader anti-rollback floor — do not use */
 
 #ifdef __cplusplus
 }
