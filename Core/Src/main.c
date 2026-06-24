@@ -192,6 +192,32 @@ static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t lis
 }
 #endif
 
+/*
+ * Clear the bootloader's failsafe boot counter (RTC->BKP6R).
+ * The secure bootloader increments BKP6R on every launch attempt and arms the
+ * IWDG before jumping here; after BL_BOOT_FAIL_MAX consecutive attempts that do
+ * not clear it, the bootloader enters USB DFU instead of launching us. Calling
+ * this once we have fully initialized signals a successful boot, so the next
+ * normal reset starts from a clean count.
+ *
+ * The HAL RTC module is not enabled in this build, so access the backup domain
+ * directly via CMSIS (same sequence used for the DFU request in main()'s loop).
+ */
+static void clear_boot_counter(void)
+{
+  PWR->CR1     |= PWR_CR1_DBP;            /* disable backup-domain write protect  */
+  RCC->APB4ENR |= RCC_APB4ENR_RTCAPBEN;  /* RTC register APB interface clock      */
+  RCC->CSR     |= RCC_CSR_LSION;          /* LSI on (RTC kernel clock source)      */
+  { uint32_t to = 0U;
+    while (((RCC->CSR & RCC_CSR_LSIRDY) == 0U) && (++to < 0x00100000U)) { } }
+  if ((RCC->BDCR & RCC_BDCR_RTCSEL) == 0U) {
+    RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_1; /* LSI */
+  }
+  RCC->BDCR |= RCC_BDCR_RTCEN;            /* enable RTC                            */
+  RTC->BKP6R = 0U;                        /* successful boot: reset the attempt count */
+  __DSB();
+}
+
 void configure_pin_as_gpio_output(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin) {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
 
@@ -621,6 +647,11 @@ int main(void)
   /* Start TIM4 interrupt for telemetry polling (250 ms) */
   HAL_TIM_Base_Start_IT(&htim4);
 
+  /* Initialisation complete: tell the bootloader this image booted successfully
+   * so its failsafe boot-counter resets. From here the main loop keeps the IWDG
+   * (armed by the bootloader, re-initialised above) refreshed. */
+  clear_boot_counter();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -938,8 +969,15 @@ static void MX_IWDG1_Init(void)
   /* USER CODE BEGIN IWDG1_Init 1 */
 
   /* USER CODE END IWDG1_Init 1 */
+  /* Timeout = (Reload + 1) * Prescaler / LSI ~= 4096 * 64 / 32000 ~= 8.2 s.
+   * Widened from the original ~0.5 s (Prescaler_4): the device initialisation
+   * between here and the first HAL_IWDG_Refresh() in the main loop (FPGA load,
+   * I2C/SPI device bring-up, the 250 ms console delay) takes far longer than
+   * 0.5 s, so the short window tripped the watchdog before the loop was reached.
+   * Matches the bootloader's IWDG window. If init ever exceeds ~8 s, add
+   * HAL_IWDG_Refresh(&hiwdg1) calls inside the long init steps. */
   hiwdg1.Instance = IWDG1;
-  hiwdg1.Init.Prescaler = IWDG_PRESCALER_4;
+  hiwdg1.Init.Prescaler = IWDG_PRESCALER_64;
   hiwdg1.Init.Window = 4095;
   hiwdg1.Init.Reload = 4095;
   if (HAL_IWDG_Init(&hiwdg1) != HAL_OK)
