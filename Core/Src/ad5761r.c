@@ -153,10 +153,10 @@ uint16_t volts_to_code(const ad5761r_dev *dev, float v)
 			if (code < 0.f)
 			{
 				code = 0.f;
-				if (code > 65535.f)
-				{
-					code = 65535.f;
-				}
+			}
+			else if (code > 65535.f)
+			{
+				code = 65535.f;
 			}
 			return (uint16_t)(code + 0.5f);
 		}
