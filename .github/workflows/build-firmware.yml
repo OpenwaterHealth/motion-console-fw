@@ -52,6 +52,27 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
 
+      # Fail fast (before the minutes-long builds) with a clear message if any
+      # signing/bootloader secret is missing, instead of the cryptic
+      # "set the GH_TOKEN environment variable" error deep in the run.
+      - name: Check required secrets
+        env:
+          FW_SIGNING_KEY: ${{ secrets.FW_SIGNING_KEY }}
+          SECOREBIN_AES_KEY: ${{ secrets.SECOREBIN_AES_KEY }}
+          BL_REPO_TOKEN: ${{ secrets.BL_REPO_TOKEN }}
+        run: |
+          missing=0
+          for v in FW_SIGNING_KEY SECOREBIN_AES_KEY BL_REPO_TOKEN; do
+            if [ -z "${!v}" ]; then
+              echo "::error::Required secret '$v' is not set. Add it under" \
+                   "Settings -> Secrets and variables -> Actions. BL_REPO_TOKEN" \
+                   "must be a PAT with read access to OpenwaterHealth/open-motion-console-bl."
+              missing=1
+            fi
+          done
+          [ "$missing" = "0" ] || exit 1
+          echo "All required secrets present."
+
       # ---------------------------
       # Determine build config from the ref:
       #   *-dev.* tag            -> Debug   (development pre-release)
@@ -237,14 +258,33 @@ jobs:
           cp "build/${{ steps.cfg.outputs.config }}-BareMetal/motion-console-fw.bin" _artifacts/motion-console-fw-baremetal.bin
           cp "build/${{ steps.cfg.outputs.config }}-BareMetal/motion-console-fw.hex" _artifacts/motion-console-fw-baremetal.hex
 
-      - name: Upload firmware artifacts
+      # Upload as three separate, clearly-named artifacts (each shows as its own
+      # row) rather than one opaque bundle:
+      #   - baremetal : standalone app @0x08000000 (no bootloader)
+      #   - signed    : app @0x08020400 signed for the bootloader slot
+      #   - production : bootloader + signed app, single factory image
+      - name: Upload bare-metal artifact
         uses: actions/upload-artifact@v4
         with:
-          name: motion-console-fw
+          name: motion-console-fw-baremetal
+          if-no-files-found: error
           path: |
             _artifacts/motion-console-fw-baremetal.bin
             _artifacts/motion-console-fw-baremetal.hex
-            _artifacts/motion-console-fw-signed.bin
+
+      - name: Upload signed slot artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-console-fw-signed
+          if-no-files-found: error
+          path: _artifacts/motion-console-fw-signed.bin
+
+      - name: Upload production artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: motion-console-production
+          if-no-files-found: error
+          path: |
             _artifacts/motion-console-production.bin
             _artifacts/motion-console-production.hex
 
