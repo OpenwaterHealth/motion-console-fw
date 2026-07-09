@@ -166,3 +166,49 @@ word→DAC scaling (A0 absolute voltage), (b) whether the 860→880 collapse is
 W-side (AD633/upstream) or current-side (OPA547 ILIM / V-to-I saturation),
 (c) the exact commanded voltage at the clip → the value the firmware gain
 gate should clamp to.
+
+### Addendum 2 (2026-07-08, same evening) — the fold-back is probably not analog
+
+Desk findings that reframe E1 before any probe touches the board:
+
+1. **Verilog (`dds_gain_control.v`) confirms the gain word goes to the
+   AD5689R raw and right-justified** — word 860 = 65.6 mV, word 880 =
+   67.1 mV. No analog stage folds back 3× over a 2 % input step. The
+   "collapse at exactly the calibrated knee" was always physically odd.
+2. **The round-6 CL raise was undone by the harness itself.**
+   `apply_laser_power()` (inside every `collect` run, before the gain
+   write) replays `laser_params.json` → `SEED_DDS_CL = [96,3] = 864`,
+   `SEED_DDS_GAIN = 0`. The FPGA gate silently drops gain writes ≥ CL. A
+   session-level raise to 1111 was therefore re-clobbered per run: every
+   word ≥ 864 ran with DAC = 0 (feedthrough floor only). The v9 runs used
+   no `--probe`, so nothing read the register back. **The 860→880
+   "fold-back" is most likely this artifact — the same failure class
+   already caught in round 5, one level up.** The "production value
+   calibrated to the analog knee" inference was circular.
+3. Harness hardened (sdk `feature/demod-config` commit `0b32961`):
+   `--dds-cl` written *after* apply_laser_power, CL + gain readback are
+   fatal on mismatch, CL/gain restored on exit, both recorded in meta.json.
+4. **FPGA scale note:** the Verilog comments give 0.081 mA/step (POR CL
+   988 ↔ "80 mA"; CW 2037 ↔ ~165 mA, matching the 140–160 mA operating
+   point). Word 860 therefore *commands* ~70 mA of modulation — the
+   findings' "±12 mA delivered" came from PDC-shift inference, which the
+   X2-offset mechanism (addendum 1) confounds. A3 (MAX4372) measures true
+   delivered mA directly.
+
+**E1 (revised):** staircase with `--dds-cl` properly in effect and readbacks
+verified, e.g. words 100 → 300 → 600 → 800 → 860 → 880 → 988 (FPGA default
+"80 mA" envelope; anything above that = explicit bench authorization),
+watching A0/A2/A3. If modulation keeps scaling smoothly past 864, the depth
+ceiling was an artifact and the feature's depth budget reopens up to the
+driver's real limits. Also log K from the same runs — at 6.1 kHz, ~70 mA
+true depth and still-null contrast would be the meaningful physics null the
+±12 mA null never was.
+
+**Bandwidth reframing (√M argument):** a 500 µs pulse at the C489-pole limit
+(~59 kHz) holds ~30 triangle cycles ≈ 60 monotonic sweeps; if each sweep
+decorrelates the speckle, K ≈ K₀/√M ≈ 0.53/7.7 ≈ 0.07 — near-full washout
+with **no MHz requirement at all**. Even 24 kHz gives K ≈ 0.11. The MHz spec
+was over-derived; depth (and the unmeasured chirp coefficient) is the
+binding constraint. E2 stands, but its purpose shifts from "prove we can't
+reach MHz" to "measure the usable corner so the interleave frequency can be
+chosen inside it."
