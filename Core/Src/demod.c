@@ -64,10 +64,21 @@ static int8_t seed_write(uint8_t reg, const uint8_t *data, uint8_t len)
                                reg, len, (uint8_t *)data);
 }
 
+/* Static Control D[0] = modulate arm (gated per trigger pulse by the FPGA),
+ * D[1] = laser_active. D[1] must stay SET while toggling D[0] between
+ * frames: clearing it drops the FPGA's laser_active chain mid-scan (bench
+ * 2026-07-09; the 0x01/0x00 pattern also left every earlier interleave run
+ * unmodulated). Full clear (0x00) is reserved for scan-edge cleanup. */
+static int8_t write_static_ctrl(uint16_t word)
+{
+    const uint8_t buf[2] = { (uint8_t)(word & 0xFFu),
+                             (uint8_t)((word >> 8) & 0xFFu) };
+    return seed_write(SEED_REG_STATIC_CTRL, buf, 2);
+}
+
 static int8_t write_modulation_state(bool on)
 {
-    const uint8_t buf[2] = { on ? 0x01u : 0x00u, 0x00u };
-    return seed_write(SEED_REG_STATIC_CTRL, buf, 2);
+    return write_static_ctrl(on ? 0x0003u : 0x0002u);
 }
 
 /* Write the DDS registers the host provided, then strobe the configure bit
@@ -229,7 +240,8 @@ void Demod_NotifyCycleISR(uint32_t cycle)
 void Demod_Tick(void)
 {
     if (s_force_off) {
-        if (write_modulation_state(false) == TCA9548A_OK) {
+        /* Scan-edge cleanup: fully clear, D[1] included. */
+        if (write_static_ctrl(0x0000u) == TCA9548A_OK) {
             s_mod_is_on = false;
             s_force_off = false;
             s_force_off_attempts = 0;
