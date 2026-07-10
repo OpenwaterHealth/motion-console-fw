@@ -125,3 +125,29 @@ runs; 15 s ladder / 60 s acceptance; right module 0x0F.
 | 9 | Static (0x20) | 0x0003 / 0x0003<->0x0002 / 0x0000 | firmware-owned exclusively | host writes were scaffolding |
 | 10 | Trigger | 40 Hz / 500 us / skip 600 | unchanged | calibration envelope |
 | 11 | Verify policy | 3-sample PDC verify, ratio 1.10, retry <=4 | fw double-strobe + RTL fix before ship | single-sample verify false-passes |
+
+## Overnight session scope (bench window 02:15, granted 2026-07-09)
+
+Authorized unattended work, in order:
+1. Re-enter demod state: DFU demod hex (worktree build/Debug) + Shelly
+   cycle + sanity (expect FPGA 1.5.0). If console unresponsive: Shelly
+   cycle, one retry, else PARK AND REPORT.
+2. Ladder words 120/160/200/240/280/320/400/500 x {49k, 98k}, 15 s runs,
+   3-sample verify-mod, DDS_CL 550. Saleae ch8-11 amplitude capture per
+   step if Logic 2 cooperates (optical ladder proceeds regardless).
+   Deliverables: threshold word, linear window, knee, sag(word).
+3. CW-trim closed loop at the knee. UNATTENDED SUB-CAP: CW word <= 2450
+   (~168.6 mA set-point) leaving >= 11 mA swing margin under the 180 mA
+   peak authorization until the swing is measured in mA (attended AM step:
+   move current-sense clip, verify peak, extend to 2616 if headroom).
+   CW_CL 2451 transient during trim runs only; restore 2048.
+4. A/B v18: A = regular, B = knee swing + trimmed CW -> per-camera K/mean
+   table (pool darks!).
+5. Code + build (NOT flash) demod.c DemodCwWord per-frame swap + SDK setter.
+6. Park: registers restored (gain 0, DDS_CL 864, CW 2037, CW_CL 2048,
+   static 0, trigger off), console LEFT on demod fw for the attended
+   morning session, results to #171, runbook + memory updated.
+
+Hard rules: no FPGA flashing; CW word never > 2450; DDS gain never > 500;
+restore after every run; abort-and-park on anything anomalous (safety
+flags, repeated I2C errors, verify never passing).
