@@ -139,3 +139,14 @@ the monitored point; MCLK (Y1) loss; chip damage; probe-work casualty
 before ANY further modulation work: probe inspection around U19/Y1, DMM on
 C57/C80/C92/C94, 25 MHz presence at R21. This incident must be included in
 the seed-current report to laser engineering.
+
+### Correction (2026-07-10, per Ethan): unseeded-TA emission during fault window
+
+An unseeded TA emits ASE. Post-fault diagnostics that applied laser params
+and started the trigger (EnableTaTrigger=true) fired the TA unseeded for
+~1-2 min cumulative (40 Hz, 2 % duty): tp1-ab legs, strobe retries,
+tp1-ab2. Earlier "laser inoperative" wording was seed-only. Question for
+laser engineering: TA tolerance for brief unseeded operation.
+Standing rules: seed-dead => no trigger starts (diagnostics use
+EnableTaTrigger=false, no laser params); console off during pin repair;
+first post-repair emission only after the seed path verifies electrically.
