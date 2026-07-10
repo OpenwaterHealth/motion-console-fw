@@ -5,8 +5,15 @@
 cams 1–3 (A/B v17), fw interleave validated (S=0.469 on prior coupling),
 three root causes fixed (DDS_CL ordering, seed_mod_ss pin, MOD-SCK CDC).
 Console parked on production 1.8.0; seed FPGA left on fixed image 1.5.0.
-**AUTHORIZATION (Ethan, 2026-07-09 EOD): peak seed current ≤ 180 mA for
-demod testing.** CW gain-word ceiling = 2616 (0.0688 mA/step); set CW_CL
+**AUTHORIZATION WITHDRAWN 2026-07-10: laser engineering set max seed
+current to 140 mA — the CW operating point itself. ALL modulation testing
+halted pending a report (see 2026-07-10-seed-current-report-for-laser-team.md)
+and a new approved envelope. Reduced demod-frame intensity is now accepted,
+so the plan inverts: lower the modulation midpoint below 140 mA instead of
+raising CW above it. The 180 mA text below is retained for history only.**
+
+~~AUTHORIZATION (Ethan, 2026-07-09 EOD): peak seed current ≤ 180 mA for
+demod testing.~~ CW gain-word ceiling = 2616 (0.0688 mA/step); set CW_CL
 just above (raw-word gate). NOTE: FPGA CL registers gate DAC words, not
 physical peaks — every session verifies the measured peak on the current
 sense. Full compensation of the −42% sag at today's saturated swing does
