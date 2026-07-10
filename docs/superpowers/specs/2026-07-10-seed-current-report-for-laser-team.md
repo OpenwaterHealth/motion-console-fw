@@ -122,3 +122,20 @@ the modulated peak stays under the normal operating point.
   production values after every run, verified by readback.
 - All runs logged (PDC, telemetry, safety flags) and reported on
   bloodflow-app issue #171.
+
+---
+
+## ADDENDUM (2026-07-10 ~11:30) — suspected hardware fault, seed modulation section
+
+During compliant sub-140 mA verification work (CW midpoint word 1200), the
+DDS stopped configuring entirely: 0/17 attempts across two power cycles and
+both bring-up paths. AD9837 VOUT ~0 V (was 340 mV parked); AD5689R VOUTA not
+tracking accepted words (lower confidence). Digital side fully healthy; PDU
+rail monitor unchanged vs yesterday. Failure bracketed to this morning's
+v19 word-500 run (~10:32): words 120-400 verified modulating minutes
+before; nothing since. Candidates: shared +5 V analog feed to U19/U22 past
+the monitored point; MCLK (Y1) loss; chip damage; probe-work casualty
+(dense clip/solder activity in that exact area). Physical checks required
+before ANY further modulation work: probe inspection around U19/Y1, DMM on
+C57/C80/C92/C94, 25 MHz presence at R21. This incident must be included in
+the seed-current report to laser engineering.
