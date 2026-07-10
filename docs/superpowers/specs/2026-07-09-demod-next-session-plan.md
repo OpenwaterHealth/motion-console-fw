@@ -29,20 +29,20 @@ step below is load-bearing, not optional.
    disarmed-PDC (±2 %), hard cap word 2616, measured peak ≤ 180 verified
    on the sense. Expected landing: CW ≈ 155–165 mA + small swing. Record
    trim word + camera means.
-2. **demod.c per-frame CW swap**: extend the interleave scheduler to write
+4. **demod.c per-frame CW swap**: extend the interleave scheduler to write
    CW_trim on arm and CW_normal on disarm (two extra 2-byte I2C writes in
    the inter-pulse window; budget fine). New JSON field `DemodCwWord` in
    SET_DEMOD/GET_DEMOD + SDK setter. Rebuild, DFU, verify.
-3. **Acceptance run** (this coupling or phantom): fw interleave N=10,
+5. **Acceptance run** (this coupling or phantom): fw interleave N=10,
    60 s × 3 repeats → `analyze` per camera. Targets: S ≤ 0.35 on cams 1–3
    (shot-floor-limited), **M = 1.00 ± 0.05 on every camera**, K_nbr ==
    K_norm (no bleed), interval(frac) = 10 (≥0.95).
 4. Repeat acceptance on the June phantom arrangement for the record.
 
-## Branch B — ceiling < word 3400
+## Fallback — if the knee sag exceeds the 180 mA headroom
 
-1. Calibrate to the approved ceiling → partial compensation; measure
-   residual ΔM and the far-camera SNR cost.
+1. Calibrate to the ceiling → partial compensation; measure residual ΔM
+   and the far-camera SNR cost.
 2. Decision memo to Brad/Henry: accept partial M, or prioritize the
    **analog re-bias** (center the modulation on the multiplier's 2.05 V
    reference / re-scale the summing so the swing is symmetric) — removes
