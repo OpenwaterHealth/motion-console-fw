@@ -21,9 +21,14 @@ step below is load-bearing, not optional.
    current-sense node correctly probed (prior A3 clip was on a wrong net;
    re-place per DVT-1A print). Output: swing_peak mA + compliance check of
    past runs vs 180.
-2. **Washout knee**: fine depth ladder words 2–20 (below the ≥25
-   saturation floor) at 49 & 98 kHz, --verify-mod on every run → smallest
-   swing that still washes cams 1–3 to shot floor, and sag(swing).
+2. **Washout knee — REVISED RANGE**: ladder words ~120–500 at 49 & 98 kHz.
+   Re-reading v15: words ≤100 likely never modulated at all (single-sample
+   verify false-passes; d25/d50 sat at baseline PDC and didn't wash) —
+   the shape is a THRESHOLD near word 100–200 (candidate mechanism:
+   AD633 Y-input offset, ±5–30 mV ≈ words 65–390 at 76 uV/LSB) then
+   clipping above ~word 400–1000. Map threshold + linear window; smallest
+   reliably-washing word + margin becomes the production gain word.
+   Upgrade --verify-mod to 3-sample averaged PDC before this ladder.
 3. **CW-trim calibration** (continuous mode, knee swing): closed loop
    against PDC — step demod-window CW word until armed-PDC ==
    disarmed-PDC (±2 %), hard cap word 2616, measured peak ≤ 180 verified
@@ -91,7 +96,7 @@ step below is load-bearing, not optional.
 ### Seed FPGA registers (I2C)
 | Register | What it does | Prod | Test values |
 |---|---|---|---|
-| DDS gain 0x02 | mod amplitude DAC (76 uV/LSB); delivered swing saturates >= word ~25 | 0 | fine ladder 2/5/10/15/20 (knee hunt); 200-300 saturated ref |
+| DDS gain 0x02 | mod amplitude DAC (76 uV/LSB); THRESHOLD ~word 100-200 (AD633 Y-offset candidate), clips above ~400-1000 | 0 | ladder 120-500 (threshold + linear window); 300 known-good ref |
 | DDS_CL 0x06 | raw-word gate, silently drops | 864 | 1111 during tests; restore 864 |
 | CW gain 0x04 | CW DAC, 0.0688 mA/step | 2037 (140.1 mA) | closed-loop trim up from 2037, HARD CAP 2616 (=180 mA authorized) |
 | CW_CL 0x08 | raw-word gate (scale mismatch: 0.081 label vs 0.0688 gain scale) | 2048 | 2617 during trim; restore 2048 |
