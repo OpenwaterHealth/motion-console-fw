@@ -77,3 +77,30 @@ step below is load-bearing, not optional.
   correction; 14 s runs catch ≤1 dark.
 - Camera geometry (right module): cams 0/7 farthest from launch, 4/5
   closest; mask 0x0F = cams 0–3 (0 = far).
+
+## Parameter reference — full demod control surface + planned test values
+
+### Host demod config (SET_DEMOD JSON)
+| Parameter | What it does | Prod/default | Test values |
+|---|---|---|---|
+| DemodPulseInterval | every Nth cycle = demod frame; 0 = off | 0 | 10 (acceptance), 5 & 20 (sensitivity), 0 for continuous cal runs |
+| ModulationFrequencyWord | f = word x 25 MHz / 2^28; M = 2 f 500 us | - | 524280 (48.8 kHz, M~49), 1048560 (97.7 kHz, M~98); 65535 as low-M ref |
+| ModulationPhaseWord | DDS start phase (12-bit) | 0 | 0 only (revisit on pulse-sync artifacts) |
+| DemodCwWord (to add) | per-demod-frame CW trim word | n/a | calibrated, expected ~2255-2400 (155-165 mA) |
+
+### Seed FPGA registers (I2C)
+| Register | What it does | Prod | Test values |
+|---|---|---|---|
+| DDS gain 0x02 | mod amplitude DAC (76 uV/LSB); delivered swing saturates >= word ~25 | 0 | fine ladder 2/5/10/15/20 (knee hunt); 200-300 saturated ref |
+| DDS_CL 0x06 | raw-word gate, silently drops | 864 | 1111 during tests; restore 864 |
+| CW gain 0x04 | CW DAC, 0.0688 mA/step | 2037 (140.1 mA) | closed-loop trim up from 2037, HARD CAP 2616 (=180 mA authorized) |
+| CW_CL 0x08 | raw-word gate (scale mismatch: 0.081 label vs 0.0688 gain scale) | 2048 | 2617 during trim; restore 2048 |
+| Static 0x20 | D0 arm, D1 laser_active | 0x0000 | 0x0003 cont / 0x0003<->0x0002 interleave / 0x0000 teardown |
+| Dynamic 0x22 | AD9837 configure strobe (~50% drop) | strobe | exercised via --verify-mod retry, count logged |
+
+### Trigger context (unchanged)
+40 Hz, 500 us pulses, skip 600/1800 (pool darks across runs for K correction).
+
+### Harness knobs
+--verify-mod (ratio 1.10, upgrade to 3-sample avg); --arm-delay 2.5 s short
+runs; 15 s ladder / 60 s acceptance; right module 0x0F.
