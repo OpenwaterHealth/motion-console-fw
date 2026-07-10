@@ -109,3 +109,19 @@ step below is load-bearing, not optional.
 ### Harness knobs
 --verify-mod (ratio 1.10, upgrade to 3-sample avg); --arm-delay 2.5 s short
 runs; 15 s ladder / 60 s acceptance; right module 0x0F.
+
+## Proposed values — principal variables (2026-07-09 EOD consolidation)
+
+| # | Variable | Tomorrow (char.) | Production proposal | Basis |
+|---|---|---|---|---|
+| 1 | DemodPulseInterval | 10 (+5/20 spot) | 40 (pending Brad) | stats speed vs 2.5% frame cost |
+| 2 | ModulationFrequencyWord | 524280 & 1048560 | 1048560 (97.7 kHz) | max sweeps/pulse per mA of swing |
+| 3 | ModulationPhaseWord | 0 | 0 | no mechanism at M~100 |
+| 4 | DDS gain (0x02) | ladder 120-500 | knee + ~30% (expect 250-400) | smallest washing swing; must clear Y-offset threshold |
+| 5 | DDS_CL (0x06) | 550 | prod gain x1.25 | protection hugs operating point; 864 was never calibrated |
+| 6 | CW gain (0x04) normal | 2037 | 2037 unchanged | laser team's operating point |
+| 7 | DemodCwWord (new) | closed-loop, cap 2616 (=180 mA); expect 2255-2400 | per-unit factory cal + PDC-parity check | unit/temp-dependent L-I compensation |
+| 8 | CW_CL (0x08) | 2617 transient, restore 2048 | 2048 normal; fw raises to trim+1 during demod scans only | keep normal-ops protection intact |
+| 9 | Static (0x20) | 0x0003 / 0x0003<->0x0002 / 0x0000 | firmware-owned exclusively | host writes were scaffolding |
+| 10 | Trigger | 40 Hz / 500 us / skip 600 | unchanged | calibration envelope |
+| 11 | Verify policy | 3-sample PDC verify, ratio 1.10, retry <=4 | fw double-strobe + RTL fix before ship | single-sample verify false-passes |
