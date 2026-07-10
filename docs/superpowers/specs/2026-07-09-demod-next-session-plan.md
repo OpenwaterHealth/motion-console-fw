@@ -5,14 +5,30 @@
 cams 1–3 (A/B v17), fw interleave validated (S=0.469 on prior coupling),
 three root causes fixed (DDS_CL ordering, seed_mod_ss pin, MOD-SCK CDC).
 Console parked on production 1.8.0; seed FPGA left on fixed image 1.5.0.
-Open decision with the laser team: CW headroom for demod-frame intensity
-compensation (statement delivered to Ethan 2026-07-09).
+**AUTHORIZATION (Ethan, 2026-07-09 EOD): peak seed current ≤ 180 mA for
+demod testing.** CW gain-word ceiling = 2616 (0.0688 mA/step); set CW_CL
+just above (raw-word gate). NOTE: FPGA CL registers gate DAC words, not
+physical peaks — every session verifies the measured peak on the current
+sense. Full compensation of the −42% sag at today's saturated swing does
+NOT fit under 180 (needs ~178–186 mA before swing) → the swing-reduction
+step below is load-bearing, not optional.
 
-## Branch A — laser team approves CW ceiling ≥ ~word 3700 (≈255 mA)
+## Sequence under the 180 mA ceiling
 
-1. **CW-trim calibration** (continuous mode, good coupling, word 300 @
-   48.8 kHz): closed loop against PDC — step demod-window CW word until
-   armed-PDC == disarmed-PDC (±2 %). Record trim word + camera means.
+0. Re-enter demod state: DFU demod fw, sanity (expect FPGA 1.5.0), write
+   the ceiling registers FIRST.
+1. **Measure delivered swing** at word 300 @ 49 kHz, CW 140 mA — needs the
+   current-sense node correctly probed (prior A3 clip was on a wrong net;
+   re-place per DVT-1A print). Output: swing_peak mA + compliance check of
+   past runs vs 180.
+2. **Washout knee**: fine depth ladder words 2–20 (below the ≥25
+   saturation floor) at 49 & 98 kHz, --verify-mod on every run → smallest
+   swing that still washes cams 1–3 to shot floor, and sag(swing).
+3. **CW-trim calibration** (continuous mode, knee swing): closed loop
+   against PDC — step demod-window CW word until armed-PDC ==
+   disarmed-PDC (±2 %), hard cap word 2616, measured peak ≤ 180 verified
+   on the sense. Expected landing: CW ≈ 155–165 mA + small swing. Record
+   trim word + camera means.
 2. **demod.c per-frame CW swap**: extend the interleave scheduler to write
    CW_trim on arm and CW_normal on disarm (two extra 2-byte I2C writes in
    the inter-pulse window; budget fine). New JSON field `DemodCwWord` in
