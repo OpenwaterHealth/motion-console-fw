@@ -39,6 +39,8 @@ uint32_t get_lsync_pulse_count(void);
 uint32_t get_fsync_pulse_count(void);
 void Trigger_Safety_Disconnect(void);
 void Trigger_Safety_Clear(void);
+void Trigger_LaserSafety_Trip(void);
+void Trigger_LaserSafety_Clear(void);
 void Trigger_PrintConfig(const Trigger_Config_t *config);
 
 void FSYNC_DelayElapsedCallback(TIM_HandleTypeDef *htim);
