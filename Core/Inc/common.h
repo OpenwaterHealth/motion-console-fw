@@ -140,6 +140,7 @@ typedef enum {
 	OW_CMD_SERIAL = 0x07,
 	OW_CMD_MESSAGES = 0x09,
 	OW_CMD_USR_CFG = 0x0A,
+	OW_CMD_BOOT_INFO = 0x0B,   /* report runtime SCB->VTOR so a host can tell bare-metal from bootloader-slot (sensor uses 0x09; here 0x09 is OW_CMD_MESSAGES) */
 	OW_CMD_DEBUG_FLAGS = 0x0C,
 	OW_CMD_DFU = 0x0D,
 	OW_CMD_NOP = 0x0E,
