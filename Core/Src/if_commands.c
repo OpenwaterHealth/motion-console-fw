@@ -115,6 +115,21 @@ static uint16_t fan_measure_rpm(uint8_t index)
     return (uint16_t)rpm;
 }
 static uint32_t id_words[3] = {0};
+
+/* OW_CMD_BOOT_INFO reply. Reports the RUNTIME vector-table base (SCB->VTOR),
+ * not the compile-time BARE_METAL_BUILD flag, so the device evidences where it
+ * is actually executing: 0x08000000 => bare-metal, 0x08020400 => bootloader
+ * slot. The host derives the boot mode. Packed, little-endian on the wire —
+ * byte-identical to the sensor's reply (openmotion-sensor-fw #110) so one host
+ * parser covers both boards. */
+typedef struct __attribute__((packed)) {
+	uint8_t  struct_version;   /* 1 */
+	uint8_t  reserved[3];
+	uint32_t vtor;             /* SCB->VTOR */
+	uint32_t flash_base;       /* image link base */
+} boot_info_t;
+static boot_info_t boot_info = {0};
+
 static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
@@ -631,6 +646,19 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             id_words[2] = HAL_GetUIDw2();
             uartResp->data_len = 16;
             uartResp->data = (uint8_t *)&id_words;
+            break;
+        case OW_CMD_BOOT_INFO:
+            /* Runtime vector-table base classifies the boot mode; see the
+             * boot_info_t comment. Host maps 0x08000000 -> bare-metal,
+             * 0x08020400 -> bootloader slot. */
+            boot_info.struct_version = 1u;
+            boot_info.reserved[0] = 0u;
+            boot_info.reserved[1] = 0u;
+            boot_info.reserved[2] = 0u;
+            boot_info.vtor       = SCB->VTOR;
+            boot_info.flash_base = SCB->VTOR;
+            uartResp->data_len = sizeof(boot_info);
+            uartResp->data = (uint8_t *)&boot_info;
             break;
         case OW_CMD_DEBUG_FLAGS:
             uartResp->command = OW_CMD_DEBUG_FLAGS;
