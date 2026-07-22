@@ -294,6 +294,83 @@ volatile bool _trip_set = false;
 /* Laser-safety (EE/OPT) trip edge guard — mirrors _trip_set for the TEC path.
  * Ensures the trip message is pushed once and the trigger stopped once per trip. */
 volatile bool _laser_safety_trip_set = false;
+
+/*
+ * @brief  Evaluate the TEC over-voltage trip for one telemetry sample.
+ *
+ * Compares the TEC sense voltage (channel 0) against TEC_TRIP_VALUE and drives
+ * the safety-disconnect / recovery edges: on the rising edge it opens the
+ * safety disconnect and pushes a one-shot error message; it auto-clears after
+ * 200 consecutive clean polls. Sets sample->tec_status. Extracted from
+ * telemetry_poll to keep that function under the IEC 62304 complexity threshold.
+ */
+static void tec_trip_evaluate(TelemetrySample *sample)
+{
+	volatile float tec_volts = adc_to_voltage(sample->tec_adc[0]);
+	if(TEC_TRIP_VALUE != 0.0 && tec_volts > TEC_TRIP_VALUE){
+		// error
+		_trip_counter = 0;
+		sample->tec_status = false;
+		Trigger_Safety_Disconnect();
+		if(!_trip_set){
+			/* push a system error JSON message into the message queue */
+			const char *msg = "{\"type\": \"system\", \"state\": \"error\", \"msg\": \"TEC trip point reached\"}";
+			if (!mq_push(msg, strlen(msg))) {
+				printf("Failed to push trip message to queue\r\n");
+			}
+		}
+		_trip_set = true;
+		printf("++++> ERROR TEC TRIP SET\r\n");
+	}else{
+		_trip_counter++;
+		if(_trip_counter > 200 && _trip_set){
+			Trigger_Safety_Clear();
+			_trip_set = false;
+		}
+		sample->tec_status = true;
+	}
+}
+
+/*
+ * @brief  Poll the EE/OPT laser-safety interlock and drive the trigger edges.
+ *
+ * Reads the EE/OPT safety-FPGA STATUS registers (I2C 0x41, mux1 ch6=EE /
+ * ch7=OPT, reg 0x24; low 3 bits = peak/pulse/rate fault latch). The safety
+ * FPGAs already hardware-inhibit the TA on a trip; this only tears down the
+ * trigger *source* so clearing a fault can't refire the laser (test-app #56).
+ * Firmware is NOT the safety guarantee. Mirrors the TEC-trip pattern, but with
+ * an explicit (not auto-timeout) recovery: the latch clears only once the FPGA
+ * STATUS reads clean again (i.e. the operator cleared the fault), and
+ * Trigger_Start stays blocked until then. Extracted from telemetry_poll to keep
+ * that function under the IEC 62304 complexity threshold.
+ */
+static void laser_safety_poll(void)
+{
+	uint8_t ee_status = 0, opt_status = 0;
+	bool ee_read  = (TCA9548A_Read_Data(1, 6, 0x41, 0x24, 1, &ee_status)  == TCA9548A_OK);
+	bool opt_read = (TCA9548A_Read_Data(1, 7, 0x41, 0x24, 1, &opt_status) == TCA9548A_OK);
+	if (ee_read && opt_read) {
+		uint8_t fault = (uint8_t)((ee_status | opt_status) & 0x07u);
+		if (fault) {
+			Trigger_LaserSafety_Trip();   /* stop trigger + latch */
+			if (!_laser_safety_trip_set) {
+				char msg[128];
+				int n = snprintf(msg, sizeof(msg),
+					"{\"type\": \"system\", \"state\": \"error\", \"msg\": \"Laser safety trip\", \"ee\": %u, \"opt\": %u}",
+					(unsigned)ee_status, (unsigned)opt_status);
+				if (n > 0 && (size_t)n < sizeof(msg) && !mq_push(msg, (size_t)n)) {
+					printf("Failed to push laser-safety trip message to queue\r\n");
+				}
+				_laser_safety_trip_set = true;
+				printf("++++> LASER SAFETY TRIP  EE=0x%02X OPT=0x%02X\r\n", ee_status, opt_status);
+			}
+		} else if (_laser_safety_trip_set) {
+			Trigger_LaserSafety_Clear();  /* fault cleared -> allow re-arm */
+			_laser_safety_trip_set = false;
+		}
+	}
+}
+
 void telemetry_poll(void)
 {
 	uint32_t now = HAL_GetTick();
@@ -336,65 +413,11 @@ void telemetry_poll(void)
 	sample.tec_adc[2] = tec_raw[2];
 	sample.tec_adc[3] = tec_raw[3];
 
-	volatile float tec_volts = adc_to_voltage(sample.tec_adc[0]);
-	if(TEC_TRIP_VALUE != 0.0 && tec_volts > TEC_TRIP_VALUE){
-		// error		
-		_trip_counter = 0;
-		sample.tec_status = false;
-		Trigger_Safety_Disconnect();
-		if(!_trip_set){
-			/* push a system error JSON message into the message queue */
-			const char *msg = "{\"type\": \"system\", \"state\": \"error\", \"msg\": \"TEC trip point reached\"}";
-			if (!mq_push(msg, strlen(msg))) {
-				printf("Failed to push trip message to queue\r\n");
-			}
-		}
-		_trip_set = true;
-		printf("++++> ERROR TEC TRIP SET\r\n");
-		
-
-	}else{
-		_trip_counter++;
-		if(_trip_counter > 200 && _trip_set){
-			Trigger_Safety_Clear();
-			_trip_set = false;
-		}
-		sample.tec_status = true;
-	}
-
-	/* Laser-safety interlock — poll the EE/OPT safety-FPGA STATUS registers
-	 * (I2C 0x41, mux1 ch6=EE / ch7=OPT, reg 0x24; low 3 bits = peak/pulse/rate
-	 * fault latch). The safety FPGAs already hardware-inhibit the TA on a trip;
-	 * this only tears down the trigger *source* so clearing a fault can't refire
-	 * the laser (test-app #56). Firmware is NOT the safety guarantee. Mirrors the
-	 * TEC-trip pattern above, but with an explicit (not auto-timeout) recovery:
-	 * the latch clears only once the FPGA STATUS reads clean again (i.e. the
-	 * operator cleared the fault), and Trigger_Start stays blocked until then. */
-	{
-		uint8_t ee_status = 0, opt_status = 0;
-		bool ee_read  = (TCA9548A_Read_Data(1, 6, 0x41, 0x24, 1, &ee_status)  == TCA9548A_OK);
-		bool opt_read = (TCA9548A_Read_Data(1, 7, 0x41, 0x24, 1, &opt_status) == TCA9548A_OK);
-		if (ee_read && opt_read) {
-			uint8_t fault = (uint8_t)((ee_status | opt_status) & 0x07u);
-			if (fault) {
-				Trigger_LaserSafety_Trip();   /* stop trigger + latch */
-				if (!_laser_safety_trip_set) {
-					char msg[128];
-					int n = snprintf(msg, sizeof(msg),
-						"{\"type\": \"system\", \"state\": \"error\", \"msg\": \"Laser safety trip\", \"ee\": %u, \"opt\": %u}",
-						(unsigned)ee_status, (unsigned)opt_status);
-					if (n > 0 && (size_t)n < sizeof(msg) && !mq_push(msg, (size_t)n)) {
-						printf("Failed to push laser-safety trip message to queue\r\n");
-					}
-					_laser_safety_trip_set = true;
-					printf("++++> LASER SAFETY TRIP  EE=0x%02X OPT=0x%02X\r\n", ee_status, opt_status);
-				}
-			} else if (_laser_safety_trip_set) {
-				Trigger_LaserSafety_Clear();  /* fault cleared -> allow re-arm */
-				_laser_safety_trip_set = false;
-			}
-		}
-	}
+	/* TEC over-voltage trip + laser-safety (EE/OPT) interlock. Both are
+	 * extracted to helpers to keep telemetry_poll under the IEC 62304
+	 * cyclomatic-complexity threshold; both run inside the DWT-timed window. */
+	tec_trip_evaluate(&sample);
+	laser_safety_poll();
 
 	/* --- end timed acquisition --- */
 	uint32_t dwt_cycles = DWT->CYCCNT - dwt_start;
