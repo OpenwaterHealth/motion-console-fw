@@ -39,6 +39,10 @@ static uint32_t         s_last_poll_ms   = 0;
 // Private variables
 extern uint8_t rxBuffer[COMMAND_MAX_SIZE];
 extern uint8_t txBuffer[COMMAND_MAX_SIZE];
+/* Snapshot of the in-flight command. comms_process copies rxBuffer here and
+ * re-arms reception immediately, so the next command can land in rxBuffer
+ * while this one is still being processed/answered. */
+static uint8_t procBuffer[COMMAND_MAX_SIZE];
 extern ADS7924_HandleTypeDef tec_ads;
 extern ADS7828_HandleTypeDef adc_mon[2];
 
@@ -150,31 +154,44 @@ void comms_process(void)
 {
 	if (!rx_flag) return;
 
+	/* Snapshot the received frame, clear rxBuffer, and re-arm reception NOW —
+	 * before processing/answering. The CDC RX only stores bytes while armed
+	 * (read-to-idle); the old design re-armed only after the response was sent,
+	 * so a command arriving in that window was silently dropped (which forced
+	 * the host to pace commands ~10 ms apart). Re-arming up front lets the next
+	 * command land in rxBuffer while we work on the snapshot. rx_flag is cleared
+	 * before re-arming so a flag set for the next command can't be lost. */
+	memcpy(procBuffer, rxBuffer, COMMAND_MAX_SIZE);
+	memset(rxBuffer, 0, COMMAND_MAX_SIZE);
+	ptrReceive = 0;
+	rx_flag = 0;
+	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
+
 	UartPacket cmd = {0};
 	UartPacket resp;
 	uint16_t calculated_crc;
 	int bufferIndex = 0;
 
-	if (rxBuffer[bufferIndex++] != OW_START_BYTE) {
+	if (procBuffer[bufferIndex++] != OW_START_BYTE) {
 		resp.id = cmd.id;
 		resp.data_len = 0;
 		resp.packet_type = OW_NAK;
 		goto NextDataPacket;
 	}
 
-	cmd.id = (rxBuffer[bufferIndex] << 8 | (rxBuffer[bufferIndex+1] & 0xFF ));
+	cmd.id = (procBuffer[bufferIndex] << 8 | (procBuffer[bufferIndex+1] & 0xFF ));
 	bufferIndex += 2;
-	cmd.packet_type = rxBuffer[bufferIndex++];
-	cmd.command = rxBuffer[bufferIndex++];
-	cmd.addr = rxBuffer[bufferIndex++];
-	cmd.reserved = rxBuffer[bufferIndex++];
+	cmd.packet_type = procBuffer[bufferIndex++];
+	cmd.command = procBuffer[bufferIndex++];
+	cmd.addr = procBuffer[bufferIndex++];
+	cmd.reserved = procBuffer[bufferIndex++];
 
 	// Extract payload length
-	cmd.data_len = (rxBuffer[bufferIndex] << 8 | (rxBuffer[bufferIndex+1] & 0xFF ));
+	cmd.data_len = (procBuffer[bufferIndex] << 8 | (procBuffer[bufferIndex+1] & 0xFF ));
 	bufferIndex += 2;
 
 	// Check if data length is valid
-	if (cmd.data_len > COMMAND_MAX_SIZE - bufferIndex && rxBuffer[COMMAND_MAX_SIZE-1] != OW_END_BYTE) {
+	if (cmd.data_len > COMMAND_MAX_SIZE - bufferIndex && procBuffer[COMMAND_MAX_SIZE-1] != OW_END_BYTE) {
 		resp.id = cmd.id;
 		resp.addr = 0;
 		resp.reserved = 0;
@@ -184,7 +201,7 @@ void comms_process(void)
 	}
 
 	// Extract data pointer
-	cmd.data = &rxBuffer[bufferIndex];
+	cmd.data = &procBuffer[bufferIndex];
 	if (cmd.data_len > COMMAND_MAX_SIZE) {
 		bufferIndex = COMMAND_MAX_SIZE-3; // [3 bytes from the end should be the crc for a continuation packet]
 	} else {
@@ -192,14 +209,14 @@ void comms_process(void)
 	}
 
 	// Extract received CRC
-	cmd.crc = (rxBuffer[bufferIndex] << 8 | (rxBuffer[bufferIndex+1] & 0xFF ));
+	cmd.crc = (procBuffer[bufferIndex] << 8 | (procBuffer[bufferIndex+1] & 0xFF ));
 	bufferIndex += 2;
 
 	// Calculate CRC for received data
 	if (cmd.data_len > COMMAND_MAX_SIZE) {
-		calculated_crc = util_crc16(&rxBuffer[1], COMMAND_MAX_SIZE-3);
+		calculated_crc = util_crc16(&procBuffer[1], COMMAND_MAX_SIZE-3);
 	} else {
-		calculated_crc = util_crc16(&rxBuffer[1], cmd.data_len + 8);
+		calculated_crc = util_crc16(&procBuffer[1], cmd.data_len + 8);
 	}
 
 	// Check CRC
@@ -213,7 +230,7 @@ void comms_process(void)
 	}
 
 	// Check end byte
-	if (rxBuffer[bufferIndex++] != OW_END_BYTE) {
+	if (procBuffer[bufferIndex++] != OW_END_BYTE) {
 		resp.id = cmd.id;
 		resp.data_len = 0;
 		resp.addr = 0;
@@ -226,14 +243,9 @@ void comms_process(void)
 
 NextDataPacket:
 	UART_INTERFACE_SendDMA(&resp);
-	memset(rxBuffer, 0, sizeof(rxBuffer));
-	ptrReceive = 0;
-	rx_flag = 0;
 	if(_tec_sample_lock){
         _tec_sample_lock = false;
 	}
-	// Restart reception
-	CDC_ReceiveToIdle(rxBuffer, COMMAND_MAX_SIZE);
 }
 
 /* ---------------------------------------------------------------------------
@@ -279,6 +291,86 @@ static inline float adc_to_voltage(uint16_t adc_code)
  */
 volatile uint32_t _trip_counter = 0;
 volatile bool _trip_set = false;
+/* Laser-safety (EE/OPT) trip edge guard — mirrors _trip_set for the TEC path.
+ * Ensures the trip message is pushed once and the trigger stopped once per trip. */
+volatile bool _laser_safety_trip_set = false;
+
+/*
+ * @brief  Evaluate the TEC over-voltage trip for one telemetry sample.
+ *
+ * Compares the TEC sense voltage (channel 0) against TEC_TRIP_VALUE and drives
+ * the safety-disconnect / recovery edges: on the rising edge it opens the
+ * safety disconnect and pushes a one-shot error message; it auto-clears after
+ * 200 consecutive clean polls. Sets sample->tec_status. Extracted from
+ * telemetry_poll to keep that function under the IEC 62304 complexity threshold.
+ */
+static void tec_trip_evaluate(TelemetrySample *sample)
+{
+	volatile float tec_volts = adc_to_voltage(sample->tec_adc[0]);
+	if(TEC_TRIP_VALUE != 0.0 && tec_volts > TEC_TRIP_VALUE){
+		// error
+		_trip_counter = 0;
+		sample->tec_status = false;
+		Trigger_Safety_Disconnect();
+		if(!_trip_set){
+			/* push a system error JSON message into the message queue */
+			const char *msg = "{\"type\": \"system\", \"state\": \"error\", \"msg\": \"TEC trip point reached\"}";
+			if (!mq_push(msg, strlen(msg))) {
+				printf("Failed to push trip message to queue\r\n");
+			}
+		}
+		_trip_set = true;
+		printf("++++> ERROR TEC TRIP SET\r\n");
+	}else{
+		_trip_counter++;
+		if(_trip_counter > 200 && _trip_set){
+			Trigger_Safety_Clear();
+			_trip_set = false;
+		}
+		sample->tec_status = true;
+	}
+}
+
+/*
+ * @brief  Poll the EE/OPT laser-safety interlock and drive the trigger edges.
+ *
+ * Reads the EE/OPT safety-FPGA STATUS registers (I2C 0x41, mux1 ch6=EE /
+ * ch7=OPT, reg 0x24; low 3 bits = peak/pulse/rate fault latch). The safety
+ * FPGAs already hardware-inhibit the TA on a trip; this only tears down the
+ * trigger *source* so clearing a fault can't refire the laser (test-app #56).
+ * Firmware is NOT the safety guarantee. Mirrors the TEC-trip pattern, but with
+ * an explicit (not auto-timeout) recovery: the latch clears only once the FPGA
+ * STATUS reads clean again (i.e. the operator cleared the fault), and
+ * Trigger_Start stays blocked until then. Extracted from telemetry_poll to keep
+ * that function under the IEC 62304 complexity threshold.
+ */
+static void laser_safety_poll(void)
+{
+	uint8_t ee_status = 0, opt_status = 0;
+	bool ee_read  = (TCA9548A_Read_Data(1, 6, 0x41, 0x24, 1, &ee_status)  == TCA9548A_OK);
+	bool opt_read = (TCA9548A_Read_Data(1, 7, 0x41, 0x24, 1, &opt_status) == TCA9548A_OK);
+	if (ee_read && opt_read) {
+		uint8_t fault = (uint8_t)((ee_status | opt_status) & 0x07u);
+		if (fault) {
+			Trigger_LaserSafety_Trip();   /* stop trigger + latch */
+			if (!_laser_safety_trip_set) {
+				char msg[128];
+				int n = snprintf(msg, sizeof(msg),
+					"{\"type\": \"system\", \"state\": \"error\", \"msg\": \"Laser safety trip\", \"ee\": %u, \"opt\": %u}",
+					(unsigned)ee_status, (unsigned)opt_status);
+				if (n > 0 && (size_t)n < sizeof(msg) && !mq_push(msg, (size_t)n)) {
+					printf("Failed to push laser-safety trip message to queue\r\n");
+				}
+				_laser_safety_trip_set = true;
+				printf("++++> LASER SAFETY TRIP  EE=0x%02X OPT=0x%02X\r\n", ee_status, opt_status);
+			}
+		} else if (_laser_safety_trip_set) {
+			Trigger_LaserSafety_Clear();  /* fault cleared -> allow re-arm */
+			_laser_safety_trip_set = false;
+		}
+	}
+}
+
 void telemetry_poll(void)
 {
 	uint32_t now = HAL_GetTick();
@@ -321,31 +413,11 @@ void telemetry_poll(void)
 	sample.tec_adc[2] = tec_raw[2];
 	sample.tec_adc[3] = tec_raw[3];
 
-	volatile float tec_volts = adc_to_voltage(sample.tec_adc[0]);
-	if(TEC_TRIP_VALUE != 0.0 && tec_volts > TEC_TRIP_VALUE){
-		// error		
-		_trip_counter = 0;
-		sample.tec_status = false;
-		Trigger_Safety_Disconnect();
-		if(!_trip_set){
-			/* push a system error JSON message into the message queue */
-			const char *msg = "{\"type\": \"system\", \"state\": \"error\", \"msg\": \"TEC trip point reached\"}";
-			if (!mq_push(msg, strlen(msg))) {
-				printf("Failed to push trip message to queue\r\n");
-			}
-		}
-		_trip_set = true;
-		printf("++++> ERROR TEC TRIP SET\r\n");
-		
-
-	}else{
-		_trip_counter++;
-		if(_trip_counter > 200 && _trip_set){
-			Trigger_Safety_Clear();
-			_trip_set = false;
-		}
-		sample.tec_status = true;
-	}
+	/* TEC over-voltage trip + laser-safety (EE/OPT) interlock. Both are
+	 * extracted to helpers to keep telemetry_poll under the IEC 62304
+	 * cyclomatic-complexity threshold; both run inside the DWT-timed window. */
+	tec_trip_evaluate(&sample);
+	laser_safety_poll();
 
 	/* --- end timed acquisition --- */
 	uint32_t dwt_cycles = DWT->CYCCNT - dwt_start;

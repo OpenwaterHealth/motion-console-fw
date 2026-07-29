@@ -31,6 +31,7 @@ jobs:
                    --std=c11 \
                    --template="[{severity}] {file}:{line} {id} - {message}" \
                    --suppress=missingIncludeSystem \
+                   --suppress=constParameterCallback:USB_DEVICE/App/usbd_cdc_if.c \
                    --suppress=*:Core/Src/lwrb.c \
                    --suppress=*:Core/Src/jsmn.c \
                    --suppress=*:Core/Src/system_stm32h7xx.c \

@@ -125,6 +125,11 @@ typedef enum {
 	OW_CODE_ERROR = 0xFF,
 } OWErrorCodes;
 
+/* Runtime debug flags toggled by OW_CMD_DEBUG_FLAGS. RAM-only (reset to 0 on
+ * boot). Bit assignments mirror openmotion-sensor-fw so one host-side
+ * definition covers both boards; the console only implements bit 0. */
+#define DEBUG_FLAG_USB_PRINTF (1u << 0) /* Mirror printf() to the USB CDC host link as OW_DATA/OW_CMD_ECHO packets */
+
 typedef enum {
 	OW_CMD_PING = 0x00,
 	OW_CMD_PONG = 0x01,
@@ -135,6 +140,8 @@ typedef enum {
 	OW_CMD_SERIAL = 0x07,
 	OW_CMD_MESSAGES = 0x09,
 	OW_CMD_USR_CFG = 0x0A,
+	OW_CMD_BOOT_INFO = 0x0B,   /* report runtime SCB->VTOR so a host can tell bare-metal from bootloader-slot (sensor uses 0x09; here 0x09 is OW_CMD_MESSAGES) */
+	OW_CMD_DEBUG_FLAGS = 0x0C,
 	OW_CMD_DFU = 0x0D,
 	OW_CMD_NOP = 0x0E,
 	OW_CMD_RESET = 0x0F,

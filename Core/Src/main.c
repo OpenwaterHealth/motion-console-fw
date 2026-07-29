@@ -20,10 +20,10 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "usb_device.h"
-#include "usb_recovery.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "usb_recovery.h"
 #include "logging.h"
 #include "usbd_cdc_if.h"
 #include "uart_comms.h"
@@ -81,6 +81,8 @@ I2C_HandleTypeDef hi2c1;
 I2C_HandleTypeDef hi2c2;
 I2C_HandleTypeDef hi2c4;
 
+IWDG_HandleTypeDef hiwdg1;
+
 RNG_HandleTypeDef hrng;
 
 SPI_HandleTypeDef hspi1;
@@ -91,7 +93,7 @@ SPI_HandleTypeDef hspi4;
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
-TIM_HandleTypeDef htim4;  /* 250 ms telemetry poll timer */
+TIM_HandleTypeDef htim4;
 TIM_HandleTypeDef htim8;
 TIM_HandleTypeDef htim12;
 TIM_HandleTypeDef htim15;
@@ -148,8 +150,9 @@ static void MX_SPI1_Init(void);
 static void MX_SPI2_Init(void);
 static void MX_SPI3_Init(void);
 static void MX_SPI4_Init(void);
-static void MX_TIM4_Init(void);
 static void MX_TIM8_Init(void);
+static void MX_TIM4_Init(void);
+static void MX_IWDG1_Init(void);
 /* USER CODE BEGIN PFP */
 
 #ifdef SCAN_DISPLAY
@@ -188,6 +191,32 @@ static uint8_t I2C_scan(I2C_HandleTypeDef * pI2c, uint8_t* addr_list, size_t lis
     return found;
 }
 #endif
+
+/*
+ * Clear the bootloader's failsafe boot counter (RTC->BKP6R).
+ * The secure bootloader increments BKP6R on every launch attempt and arms the
+ * IWDG before jumping here; after BL_BOOT_FAIL_MAX consecutive attempts that do
+ * not clear it, the bootloader enters USB DFU instead of launching us. Calling
+ * this once we have fully initialized signals a successful boot, so the next
+ * normal reset starts from a clean count.
+ *
+ * The HAL RTC module is not enabled in this build, so access the backup domain
+ * directly via CMSIS (same sequence used for the DFU request in main()'s loop).
+ */
+static void clear_boot_counter(void)
+{
+  PWR->CR1     |= PWR_CR1_DBP;            /* disable backup-domain write protect  */
+  RCC->APB4ENR |= RCC_APB4ENR_RTCAPBEN;  /* RTC register APB interface clock      */
+  RCC->CSR     |= RCC_CSR_LSION;          /* LSI on (RTC kernel clock source)      */
+  { uint32_t to = 0U;
+    while (((RCC->CSR & RCC_CSR_LSIRDY) == 0U) && (++to < 0x00100000U)) { } }
+  if ((RCC->BDCR & RCC_BDCR_RTCSEL) == 0U) {
+    RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_1; /* LSI */
+  }
+  RCC->BDCR |= RCC_BDCR_RTCEN;            /* enable RTC                            */
+  RTC->BKP6R = 0U;                        /* successful boot: reset the attempt count */
+  __DSB();
+}
 
 void configure_pin_as_gpio_output(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin) {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
@@ -404,8 +433,9 @@ int main(void)
   MX_SPI2_Init();
   MX_SPI3_Init();
   MX_SPI4_Init();
-  MX_TIM4_Init();
   MX_TIM8_Init();
+  MX_TIM4_Init();
+  MX_IWDG1_Init();
   /* USER CODE BEGIN 2 */
 
   init_dma_logging();
@@ -617,6 +647,11 @@ int main(void)
   /* Start TIM4 interrupt for telemetry polling (250 ms) */
   HAL_TIM_Base_Start_IT(&htim4);
 
+  /* Initialisation complete: tell the bootloader this image booted successfully
+   * so its failsafe boot-counter resets. From here the main loop keeps the IWDG
+   * (armed by the bootloader, re-initialised above) refreshed. */
+  clear_boot_counter();
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -627,10 +662,18 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
     comms_process();
+    logging_pump();   /* flush USB-printf log data after command responses */
     telemetry_poll();
     usb_recovery_task();
     pdc_poll_tick();
     Odometer_Update_System();
+    
+    if (HAL_IWDG_Refresh(&hiwdg1) != HAL_OK)
+    {
+      /* Refresh Error */
+      Error_Handler();
+    }
+
     HAL_Delay(1);
   }
   /* USER CODE END 3 */
@@ -658,8 +701,10 @@ void SystemClock_Config(void)
   /** Initializes the RCC Oscillators according to the specified parameters
   * in the RCC_OscInitTypeDef structure.
   */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI48|RCC_OSCILLATORTYPE_LSI
+                              |RCC_OSCILLATORTYPE_HSE;
   RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.LSIState = RCC_LSI_ON;
   RCC_OscInitStruct.HSI48State = RCC_HSI48_ON;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
@@ -906,6 +951,42 @@ static void MX_I2C4_Init(void)
   /* USER CODE BEGIN I2C4_Init 2 */
 
   /* USER CODE END I2C4_Init 2 */
+
+}
+
+/**
+  * @brief IWDG1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_IWDG1_Init(void)
+{
+
+  /* USER CODE BEGIN IWDG1_Init 0 */
+
+  /* USER CODE END IWDG1_Init 0 */
+
+  /* USER CODE BEGIN IWDG1_Init 1 */
+
+  /* USER CODE END IWDG1_Init 1 */
+  /* Timeout = (Reload + 1) * Prescaler / LSI ~= 4096 * 64 / 32000 ~= 8.2 s.
+   * Widened from the original ~0.5 s (Prescaler_4): the device initialisation
+   * between here and the first HAL_IWDG_Refresh() in the main loop (FPGA load,
+   * I2C/SPI device bring-up, the 250 ms console delay) takes far longer than
+   * 0.5 s, so the short window tripped the watchdog before the loop was reached.
+   * Matches the bootloader's IWDG window. If init ever exceeds ~8 s, add
+   * HAL_IWDG_Refresh(&hiwdg1) calls inside the long init steps. */
+  hiwdg1.Instance = IWDG1;
+  hiwdg1.Init.Prescaler = IWDG_PRESCALER_64;
+  hiwdg1.Init.Window = 4095;
+  hiwdg1.Init.Reload = 4095;
+  if (HAL_IWDG_Init(&hiwdg1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN IWDG1_Init 2 */
+
+  /* USER CODE END IWDG1_Init 2 */
 
 }
 
@@ -1310,6 +1391,51 @@ static void MX_TIM3_Init(void)
 }
 
 /**
+  * @brief TIM4 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM4_Init(void)
+{
+
+  /* USER CODE BEGIN TIM4_Init 0 */
+
+  /* USER CODE END TIM4_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM4_Init 1 */
+
+  /* USER CODE END TIM4_Init 1 */
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 12000-1;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 2500-1;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM4_Init 2 */
+
+  /* USER CODE END TIM4_Init 2 */
+
+}
+
+/**
   * @brief TIM8 Initialization Function
   * @param None
   * @retval None
@@ -1406,46 +1532,6 @@ static void MX_TIM12_Init(void)
   * @param None
   * @retval None
   */
-/**
-  * @brief TIM4 Initialization — 250 ms periodic telemetry tick
-  * @note  TIM4 is on APB1. With HCLK=120 MHz and APB1_DIV1,
-  *        the TIM4 clock is 120 MHz.
-  *        PSC=12000-1 => 10 kHz tick; ARR=2500-1 => 250 ms period.
-  */
-static void MX_TIM4_Init(void)
-{
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig      = {0};
-
-  __HAL_RCC_TIM4_CLK_ENABLE();
-
-  htim4.Instance               = TIM4;
-  htim4.Init.Prescaler         = 12000U - 1U;
-  htim4.Init.CounterMode       = TIM_COUNTERMODE_UP;
-  htim4.Init.Period            = 2500U - 1U;
-  htim4.Init.ClockDivision     = TIM_CLOCKDIVISION_DIV1;
-  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim4) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim4, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode     = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /* Enable TIM4 update interrupt in NVIC */
-  HAL_NVIC_SetPriority(TIM4_IRQn, 10, 0);
-  HAL_NVIC_EnableIRQ(TIM4_IRQn);
-}
-
 static void MX_TIM15_Init(void)
 {
 
@@ -1806,7 +1892,35 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
   if (htim->Instance == TIM15) {
     HAL_TIM_Base_Stop_IT(htim);
     if(_enter_dfu) {
-      *((uint32_t *)0x38000000) = 0xDEADBEEF; 
+#if defined(BARE_METAL_BUILD)
+      /* Bare-metal build: no custom bootloader. Arm the RAM magic that
+       * CheckBootloaderFlag() (in system_stm32h7xx.c) reads first thing after
+       * the reset below; it then jumps to the STM32 system-memory ROM DFU
+       * loader. D3 SRAM survives the software reset. */
+      *((volatile uint32_t *)0x38000000) = 0xDEADBEEFU; /* BL_DFU_RAM_FLAG_MAGIC */
+      __DSB();
+#else
+      /* Request DFU from the custom secure bootloader (NOT the STM32 ROM
+       * loader, which is disabled in production). The bootloader reads this
+       * backup register on the next reset and, when it holds the magic, enters
+       * its USB DFU instead of launching the application. The register lives in
+       * the VBAT/backup domain and survives the software reset below.
+       *
+       * Direct CMSIS access (HAL RTC module is not enabled in this build):
+       * unlock the backup domain (DBP), clock the RTC APB register interface
+       * and kernel (LSI), then arm BL_FORCE_DFU_MAGIC in RTC->BKP7R. */
+      PWR->CR1   |= PWR_CR1_DBP;            /* disable backup-domain write protect */
+      RCC->APB4ENR |= RCC_APB4ENR_RTCAPBEN; /* RTC register APB interface clock     */
+      RCC->CSR   |= RCC_CSR_LSION;          /* LSI on (RTC kernel clock source)     */
+      { uint32_t to = 0U;
+        while (((RCC->CSR & RCC_CSR_LSIRDY) == 0U) && (++to < 0x00100000U)) { } }
+      if ((RCC->BDCR & RCC_BDCR_RTCSEL) == 0U) {
+        RCC->BDCR = (RCC->BDCR & ~RCC_BDCR_RTCSEL) | RCC_BDCR_RTCSEL_1; /* LSI */
+      }
+      RCC->BDCR |= RCC_BDCR_RTCEN;          /* enable RTC                           */
+      RTC->BKP7R = 0xB007C0DEU;             /* BL_FORCE_DFU_MAGIC                    */
+      __DSB();
+#endif
     }
 
     // Stop and De-initialize Timers

@@ -23,6 +23,22 @@
             "cacheVariables": {
                 "CMAKE_BUILD_TYPE": "Release"
             }
+        },
+        {
+            "name": "Debug-BareMetal",
+            "inherits": "default",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "BARE_METAL": "ON"
+            }
+        },
+        {
+            "name": "Release-BareMetal",
+            "inherits": "default",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "BARE_METAL": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -33,6 +49,14 @@
         {
             "name": "Release",
             "configurePreset": "Release"
+        },
+        {
+            "name": "Debug-BareMetal",
+            "configurePreset": "Debug-BareMetal"
+        },
+        {
+            "name": "Release-BareMetal",
+            "configurePreset": "Release-BareMetal"
         }
     ]
 }

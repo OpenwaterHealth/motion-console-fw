@@ -24,6 +24,7 @@
 #include "pdc_buffer.h"
 #include "odometer.h"
 #include "console_serial.h"
+#include "logging.h"
 
 #include <string.h>
 
@@ -114,6 +115,21 @@ static uint16_t fan_measure_rpm(uint8_t index)
     return (uint16_t)rpm;
 }
 static uint32_t id_words[3] = {0};
+
+/* OW_CMD_BOOT_INFO reply. Reports the RUNTIME vector-table base (SCB->VTOR),
+ * not the compile-time BARE_METAL_BUILD flag, so the device evidences where it
+ * is actually executing: 0x08000000 => bare-metal, 0x08020400 => bootloader
+ * slot. The host derives the boot mode. Packed, little-endian on the wire —
+ * byte-identical to the sensor's reply (openmotion-sensor-fw #110) so one host
+ * parser covers both boards. */
+typedef struct __attribute__((packed)) {
+	uint8_t  struct_version;   /* 1 */
+	uint8_t  reserved[3];
+	uint32_t vtor;             /* SCB->VTOR */
+	uint32_t flash_base;       /* image link base */
+} boot_info_t;
+static boot_info_t boot_info = {0};
+
 static uint8_t i2c_list[10] = {0};
 static uint8_t i2c_data[0xff] = {0};
 static uint32_t last_fsync_count = 0;
@@ -631,6 +647,43 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             uartResp->data_len = 16;
             uartResp->data = (uint8_t *)&id_words;
             break;
+        case OW_CMD_BOOT_INFO:
+            /* Runtime vector-table base classifies the boot mode; see the
+             * boot_info_t comment. Host maps 0x08000000 -> bare-metal,
+             * 0x08020400 -> bootloader slot. */
+            boot_info.struct_version = 1u;
+            boot_info.reserved[0] = 0u;
+            boot_info.reserved[1] = 0u;
+            boot_info.reserved[2] = 0u;
+            boot_info.vtor       = SCB->VTOR;
+            boot_info.flash_base = SCB->VTOR;
+            uartResp->data_len = sizeof(boot_info);
+            uartResp->data = (uint8_t *)&boot_info;
+            break;
+        case OW_CMD_DEBUG_FLAGS:
+            uartResp->command = OW_CMD_DEBUG_FLAGS;
+            /* reserved bit0: 0 = get, 1 = set (payload = uint32 little-endian).
+             * Either way we respond with the current flags. */
+            if ((cmd->reserved & 0x01) != 0)
+            {
+                if (cmd->data_len != sizeof(uint32_t))
+                {
+                    uartResp->packet_type = OW_ERROR;
+                    uartResp->data_len = 0;
+                    uartResp->data = NULL;
+                    break;
+                }
+                uint32_t new_flags = 0;
+                memcpy(&new_flags, cmd->data, sizeof(new_flags));
+                logging_set_debug_flags(new_flags);
+            }
+            {
+                static uint32_t debug_flags_resp;
+                debug_flags_resp = logging_get_debug_flags();
+                uartResp->data_len = sizeof(debug_flags_resp);
+                uartResp->data = (uint8_t *)&debug_flags_resp;
+            }
+            break;
         case OW_CMD_MESSAGES:
             uartResp->command = OW_CMD_MESSAGES;
             {
@@ -805,12 +858,23 @@ _Bool process_if_command(UartPacket *uartResp, UartPacket *cmd)
             break;
 
         case OW_CMD_DFU:
-            printf("Enter DFU\r\n");
+#if defined(BARE_METAL_BUILD)
+            printf("Enter DFU (STM32 ROM bootloader)\r\n");
+#else
+            printf("Enter DFU (custom bootloader)\r\n");
+#endif
             uartResp->command = cmd->command;
             uartResp->addr = cmd->addr;
             uartResp->reserved = cmd->reserved;
             uartResp->data_len = 0;
 
+            /* Enter DFU. The reset is deferred to the TIM15 callback so this
+             * response is transmitted and peripherals shut down cleanly first.
+             * The callback arms the DFU magic and issues NVIC_SystemReset():
+             *   - bare-metal build: RAM magic -> CheckBootloaderFlag() jumps to
+             *     the STM32 system-memory ROM DFU loader after reset.
+             *   - custom-bootloader build: RTC->BKP7R magic -> the secure
+             *     bootloader enters its own USB DFU instead of this image. */
             _enter_dfu = true;
 
             __HAL_TIM_CLEAR_FLAG(&htim15, TIM_FLAG_UPDATE);

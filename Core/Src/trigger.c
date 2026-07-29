@@ -21,6 +21,13 @@ Trigger_Config_t trigger_config = { 40.0f, 1000, 250, 1000 };
 
 volatile uint8_t _usb_trigger_interlock = 0;
 volatile uint8_t _safety_trigger_interlock = 0;
+/* Laser-safety (EE/OPT) trip latch. Set when telemetry_poll reads a latched
+ * peak/pulse/rate fault from a safety FPGA; blocks Trigger_Start until the fault
+ * clears. NOTE: this is not the laser-safety guarantee (the safety FPGAs
+ * hardware-inhibit the TA on their own) — it only guarantees the trigger source
+ * is torn down so clearing a fault can't refire the laser. Separate from
+ * _safety_trigger_interlock (the TEC thermal path, which auto-recovers). */
+volatile uint8_t _laser_safety_interlock = 0;
 
 volatile uint32_t fsync_counter = 0;
 volatile uint32_t lsync_counter = 0;
@@ -196,6 +203,17 @@ void Trigger_Safety_Clear(void)
     _safety_trigger_interlock = 0;
 }
 
+void Trigger_LaserSafety_Trip(void)
+{
+    _laser_safety_interlock = 1;
+    Trigger_Stop();
+}
+
+void Trigger_LaserSafety_Clear(void)
+{
+    _laser_safety_interlock = 0;
+}
+
 HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
     if (config == NULL) {
         return HAL_ERROR; // Null pointer guard
@@ -270,7 +288,7 @@ HAL_StatusTypeDef Trigger_SetConfig(const Trigger_Config_t *config) {
 
 
 HAL_StatusTypeDef Trigger_Start() {
-    if(_usb_trigger_interlock){
+    if(_usb_trigger_interlock || _laser_safety_interlock){
         return HAL_ERROR;
     }
 
