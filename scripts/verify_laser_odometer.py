@@ -99,21 +99,37 @@ def main() -> int:
     if iface.console.set_trigger_json(cfg) is None:
         iface.stop()
         raise RuntimeError("set_trigger_json failed")
+    # The firmware counts pulses from when it processes START to when it
+    # processes STOP, so command latency legitimately widens the window
+    # beyond the host-side sleep. Bracket the true window from the host:
+    # it is at least (start-ack .. pre-stop) and at most (pre-start ..
+    # stop-ack), and the count must fall inside that envelope (+/-1 pulse
+    # for frame-boundary alignment).
+    t_pre_start = time.monotonic()
     if not iface.console.start_trigger():
         iface.stop()
         raise RuntimeError("start_trigger failed (interlock tripped?)")
+    t_post_start = time.monotonic()
     time.sleep(args.duration)
+    t_pre_stop = time.monotonic()
     if not iface.console.stop_trigger():
         iface.stop()
         raise RuntimeError("stop_trigger failed")
+    t_post_stop = time.monotonic()
 
+    lo = int((t_pre_stop - t_post_start) * FRAME_RATE_HZ) - 1
+    hi = int((t_post_stop - t_pre_start) * FRAME_RATE_HZ) + 1
     after_scan = read_odo(iface, "after scan")
     scan_delta = after_scan - base
-    if abs(scan_delta - expected) <= 1:
-        print(f"  PASS: scan delta = +{scan_delta} (expected ~{expected})")
+    print(f"  host window: {t_pre_stop - t_post_start:.3f}s inner / "
+          f"{t_post_stop - t_pre_start:.3f}s outer -> allow +{lo}..+{hi}")
+    if lo <= scan_delta <= hi:
+        print(f"  PASS: scan delta = +{scan_delta} (expected ~{expected}, "
+              f"within measured window)")
     else:
-        failures.append(f"scan delta = +{scan_delta}, expected ~{expected}")
-        print(f"  FAIL: scan delta = +{scan_delta}, expected ~{expected}")
+        failures.append(f"scan delta = +{scan_delta}, outside the possible "
+                        f"window +{lo}..+{hi} (expected ~{expected})")
+        print(f"  FAIL: scan delta = +{scan_delta}, allowed +{lo}..+{hi}")
 
     # ── Phases 3-4: idle port close/reopen must not move the odometer ────
     prev = after_scan
