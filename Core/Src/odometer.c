@@ -20,6 +20,7 @@
 static SystemOdometer_t system_odo;
 static LaserOdometer_t laser_odo;
 static bool odometer_initialized = false;
+static bool laser_scan_active = false;
 
 /* EEPROM device + ring cursor. s_slot is the index of the newest record on the
  * device (-1 until the first write). s_seq is that record's sequence number. */
@@ -114,6 +115,7 @@ HAL_StatusTypeDef Odometer_Init(void)
     s_slot = -1;
     s_seq = 0;
     odometer_initialized = false;
+    laser_scan_active = false;
 
     if (EEPROM_Init(&s_eeprom) != HAL_OK) {
         printf("Odometer: EEPROM not present — odometers disabled\r\n");
@@ -217,7 +219,10 @@ HAL_StatusTypeDef Odometer_Scan_Start(void)
     if (!odometer_initialized) {
         return HAL_ERROR;
     }
+
     laser_odo.scan_start_pulses = get_lsync_pulse_count();
+    laser_scan_active = true;
+
     printf("Scan started, laser pulses at start: %lu\r\n",
            (unsigned long)laser_odo.scan_start_pulses);
     return HAL_OK;
@@ -233,6 +238,13 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void)
         return HAL_ERROR;
     }
 
+    /* Trigger_Stop() is also used for USB/VCP disconnect and safety paths.
+     * Ignore stop events when no scan is active so a stale lsync_counter value
+     * cannot be counted again as phantom laser pulses. */
+    if (!laser_scan_active) {
+        return HAL_OK;
+    }
+
     uint32_t current_pulses = get_lsync_pulse_count();
     uint32_t scan_pulses;
     if (current_pulses >= laser_odo.scan_start_pulses) {
@@ -243,16 +255,16 @@ HAL_StatusTypeDef Odometer_Scan_Finish(void)
     }
 
     laser_odo.total_pulses += scan_pulses;
+
+    /* Mark the scan finished before persistence. If the EEPROM write fails,
+     * a later Trigger_Stop() must not count this same scan a second time. */
+    laser_scan_active = false;
+    laser_odo.scan_start_pulses = 0;
+
     printf("Scan finished, pulses this scan: %lu, total: %lu\r\n",
            (unsigned long)scan_pulses, (unsigned long)laser_odo.total_pulses);
 
-    HAL_StatusTypeDef status = odo_persist();
-    if (status != HAL_OK) {
-        return status;
-    }
-
-    laser_odo.scan_start_pulses = 0;
-    return HAL_OK;
+    return odo_persist();
 }
 
 /**
@@ -273,6 +285,7 @@ HAL_StatusTypeDef Odometer_Reset(OdoResetTarget target)
         case ODO_RESET_LASER:
             laser_odo.total_pulses = 0;
             laser_odo.scan_start_pulses = 0;
+            laser_scan_active = false;
             printf("Odometer reset: laser\r\n");
             break;
         case ODO_RESET_BOTH:
@@ -280,6 +293,7 @@ HAL_StatusTypeDef Odometer_Reset(OdoResetTarget target)
             system_odo.last_update_tick = HAL_GetTick();
             laser_odo.total_pulses = 0;
             laser_odo.scan_start_pulses = 0;
+            laser_scan_active = false;
             printf("Odometer reset: both\r\n");
             break;
         default:
